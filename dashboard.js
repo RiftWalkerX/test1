@@ -1,8 +1,5 @@
 import { auth, db } from "./firebase-init.js";
-import {
-  loadFriendRequests,
-  sendFriendRequest,
-} from "./friends.js";
+import { loadFriendRequests, sendFriendRequest } from "./friends.js";
 import { loadRoomInvites, setupRoomInviteListener } from "./room-invites.js";
 import { checkDailyStreak } from "./streak.js";
 import { loadProfileData } from "./profile.js";
@@ -53,7 +50,7 @@ function setupUIEventListeners() {
 
   // Add friend modal
   setupAddFriendModal();
-
+  setupJoinRoomModal();
   // Level nodes
   document.querySelectorAll(".level-node").forEach((node) => {
     node.addEventListener("click", () => {
@@ -105,7 +102,45 @@ function setupAddFriendModal() {
     }
   });
 }
+function setupJoinRoomModal() {
+  const joinRoomBtn = document.getElementById("openJoinRoomModalBtn");
+  const joinRoomModal = document.getElementById("joinRoomModal");
+  const closeBtn = document.getElementById("closeJoinRoomModalBtn");
+  const joinBtn = document.getElementById("joinRoomBtn");
+  const input = document.getElementById("roomCodeInput");
 
+  joinRoomBtn?.addEventListener("click", () => {
+    showModal(joinRoomModal);
+    input?.focus();
+  });
+
+  closeBtn?.addEventListener("click", () => {
+    hideModal(joinRoomModal);
+    if (input) input.value = "";
+  });
+
+  joinBtn?.addEventListener("click", async () => {
+    const roomCode = input?.value.trim();
+    if (!roomCode) {
+      showToast("يرجى إدخال رمز الغرفة", "warning");
+      return;
+    }
+
+    try {
+      // Redirect to the room with the provided code
+      window.location.href = `room.html?id=${roomCode}`;
+    } catch (e) {
+      showToast("فشل في الانضمام إلى الغرفة", "error");
+    }
+  });
+
+  // Allow pressing Enter to submit the form
+  input?.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+      joinBtn?.click();
+    }
+  });
+}
 // Modal utilities
 function showModal(modal) {
   if (!modal) return;

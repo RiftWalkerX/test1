@@ -82,6 +82,7 @@ export const loadRoomInvites = async function () {
   const notificationContainer = document.getElementById(
     "room-invite-notification"
   );
+  const invitesList = document.getElementById("roomInvitesList");
   if (!notificationContainer) return;
 
   if (querySnapshot.empty) {
