@@ -84,23 +84,12 @@ export function getLevelData(level, completedLevels) {
   const data = levelData[level];
   if (!data) return null;
 
-  // Status logic - FIXED: New users should start at level 1
+  // Status logic
   if (completedLevels.includes(level)) {
     data.status = "completed";
-  } else if (level === 1 && completedLevels.length === 0) {
-    // First level for new users
+  } else if (level === 1 || completedLevels.includes(level - 1)) {
     data.status = "current";
-  } else if (
-    completedLevels.length > 0 &&
-    level === completedLevels.length + 1
-  ) {
-    // Next level after completed ones
-    data.status = "current";
-  } else if (level <= completedLevels.length) {
-    // Already completed levels
-    data.status = "completed";
   } else {
-    // Future levels
     data.status = "locked";
   }
 
@@ -208,8 +197,8 @@ export async function updateLevelsStatus(completedLevels = []) {
             <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
           </svg>
         `;
-        statusText.className = "text-xs text-green-300";
-        statusText.textContent = "مكتمل";
+        // statusText.className = "text-xs text-green-300";
+        // statusText.textContent = "مكتمل";
 
         // Remove frog avatar if it exists
         const frogAvatar = levelNode.querySelector(".absolute.-top-8");
@@ -225,8 +214,8 @@ export async function updateLevelsStatus(completedLevels = []) {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L极3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
           </svg>
         `;
-        statusText.className = "text-xs text-blue-300";
-        statusText.textContent = "متاح الآن";
+        // statusText.className = "text-xs text-blue-300";
+        // statusText.textContent = "متاح الآن";
 
         // Add frog avatar
         if (!levelNode.querySelector(".absolute.-top-8")) {
@@ -240,7 +229,8 @@ export async function updateLevelsStatus(completedLevels = []) {
           `;
           levelNode.querySelector(".relative").prepend(frogAvatar);
         }
-      } else {
+      }
+      else {
         // Locked level - gray
         iconContainer.className =
           "w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center shadow-lg border-4 border-gray-500 opacity-50";
@@ -249,8 +239,8 @@ export async function updateLevelsStatus(completedLevels = []) {
             <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7极V7a3 3 0 616 极0z" clip-rule="evenodd"/>
           </svg>
         `;
-        statusText.className = "text-xs text-gray-500";
-        statusText.textContent = "مقفل";
+        // statusText.className = "text-xs text-gray-500";
+        // statusText.textContent = "مقفل";
 
         // Remove frog avatar if it exists
         const frogAvatar = levelNode.querySelector(".absolute.-top-8");
