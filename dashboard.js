@@ -51,6 +51,7 @@ function setupUIEventListeners() {
   // Add friend modal
   setupAddFriendModal();
   setupJoinRoomModal();
+  setupTrainingGuideModal();
   // Level nodes
   document.querySelectorAll(".level-node").forEach((node) => {
     node.addEventListener("click", () => {
@@ -99,6 +100,168 @@ function setupAddFriendModal() {
       hideModal(addFriendModal);
     } catch (e) {
       showToast("فشل في إرسال طلب الصداقة", "error");
+    }
+  });
+}
+function setupTrainingGuideModal() {
+  const trainingGuideBtn = document.getElementById("openTrainingGuideBtn");
+  const trainingGuideModal = document.getElementById("trainingGuideModal");
+  const closeBtn = document.getElementById("closeTrainingGuideBtn");
+  const startTutorialBtn = document.getElementById("startTutorialBtn");
+  const skipTutorialBtn = document.getElementById("skipTutorialBtn");
+  const prevBtn = document.getElementById("prevTutorialBtn");
+  const nextBtn = document.getElementById("nextTutorialBtn");
+
+  let currentPage = 0;
+  const totalPages = 8;
+
+  // Tutorial content - in a real app, this would be loaded from a separate file or API
+  const tutorialContent = [
+    {
+      title: "مرحبًا بك في دليل التدريب!",
+      description:
+        "سنساعدك في فهم كيفية استخدام منصة Zero Fake والاستفادة القصوى من ميزاتها.",
+      image: "tutorial_welcome.png",
+      content: `<div class="text-center">
+        <div class="w-20 h-20 mx-auto mb-4 bg-blue-500/20 rounded-full flex items-center justify-center">
+          <svg class="w-10 h-10 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+        </div>
+        <h4 class="text-xl font-bold text-white mb-2">مرحبًا بك في دليل التدريب!</h4>
+        <p class="text-blue-200">سنساعدك في فهم كيفية استخدام منصة Zero Fake والاستفادة القصوى من ميزاتها.</p>
+      </div>`,
+    },
+    {
+      title: "لوحة التحكم",
+      description:
+        "هذه هي لوحة التحكم الرئيسية حيث يمكنك رؤية إحصائياتك والتقدم في المستويات.",
+      image: "dashboard_overview.png",
+      content: `<div class="text-center">
+        <img src="dashboard_screenshot.png" alt="لوحة التحكم" class="mx-auto mb-4 rounded-lg shadow-lg max-w-full h-48 object-cover">
+        <h4 class="text-xl font-bold text-white mb-2">لوحة التحكم</h4>
+        <p class="text-blue-200">هذه هي لوحة التحكم الرئيسية حيث يمكنك رؤية إحصائياتك والتقدم في المستويات.</p>
+      </div>`,
+    },
+    {
+      title: "خريطة التدريب",
+      description:
+        "هنا يمكنك رؤية جميع مستويات التدريب والتقدم الذي أحرزته فيها.",
+      image: "training_map.png",
+      content: `<div class="text-center">
+        <img src="training_map_screenshot.png" alt="خريطة التدريب" class="mx-auto mb-4 rounded-lg shadow-lg max-w-full h-48 object-cover">
+        <h4 class="text-xl font-bold text-white mb-2">خريطة التدريب</h4>
+        <p class="text-blue-200">هنا يمكنك رؤية جميع مستويات التدريب والتقدم الذي أحرزته فيها.</p>
+      </div>`,
+    },
+    {
+      title: "النقاط والجوائز",
+      description:
+        "اكتسب النقاط من إكمال المستويات وحافظ على سلسلة الإنجازات اليومية.",
+      image: "points_rewards.png",
+      content: `<div class="text-center">
+        <img src="points_screenshot.png" alt="النقاط والجوائز" class="mx-auto mb-4 rounded-lg shadow-lg max-w-full h-48 object-cover">
+        <h4 class="text-xl font-bold text-white mb-2">النقاط والجوائز</h4>
+        <p class="text-blue-200">اكتسب النقاط من إكمال المستويات وحافظ على سلسلة الإنجازات اليومية.</p>
+      </div>`,
+    },
+    {
+      title: "المستويات التدريبية",
+      description:
+        "كل مستوى يركز على نوع مختلف من التصيد والاحتيال الإلكتروني.",
+      image: "training_levels.png",
+      content: `<div class="text-center">
+        <img src="levels_screenshot.png" alt="المستويات التدريبية" class="mx-auto mb-4 rounded-lg shadow-lg max-w-full h-48 object-cover">
+        <h4 class="text-xl font-bold text-white mb-2">المستويات التدريبية</h4>
+        <p class="text-blue-200">كل مستوى يركز على نوع مختلف من التصيد والاحتيال الإلكتروني.</p>
+      </div>`,
+    },
+    {
+      title: "التدريب الجماعي",
+      description: "انضم إلى الغرف التدريبية مع أصدقائك لتتعلموا معًا.",
+      image: "group_training.png",
+      content: `<div class="text-center">
+        <img src="group_training_screenshot.png" alt="التدريب الجماعي" class="mx-auto mb-4 rounded-lg shadow-lg max-w-full h-48 object-cover">
+        <h4 class="text-xl font-bold text-white mb-2">التدريب الجماعي</h4>
+        <p class="text-blue-200">انضم إلى الغرف التدريبية مع أصدقائك لتتعلموا معًا.</p>
+      </div>`,
+    },
+    {
+      title: "لوحة المتصدرين",
+      description: "تابع ترتيبك بين المتدربين الآخرين وتنافس مع أصدقائك.",
+      image: "leaderboard.png",
+      content: `<div class="text-center">
+        <img src="leaderboard_screenshot.png" alt="لوحة المتصدرين" class="mx-auto mb-4 rounded-lg shadow-lg max-w-full h-48 object-cover">
+        <h4 class="text-xl font-bold text-white mb-2">لوحة المتصدرين</h4>
+        <p class="text-blue-200">تابع ترتيبك بين المتدربين الآخرين وتنافس مع أصدقائك.</p>
+      </div>`,
+    },
+    {
+      title: "الملف الشخصي",
+      description: "خصص ملفك الشخصي واطلع على إحصائياتك الكاملة.",
+      image: "profile.png",
+      content: `<div class="text-center">
+        <img src="profile_screenshot.png" alt="الملف الشخصي" class="mx-auto mb-4 rounded-lg shadow-lg max-w-full h-48 object-cover">
+        <h4 class="text-xl font-bold text-white mb-2">الملف الشخصي</h4>
+        <p class="text-blue-200">خصص ملفك الشخصي واطلع على إحصائياتك الكاملة.</p>
+      </div>`,
+    },
+  ];
+
+  // Function to update tutorial content
+  function updateTutorialContent() {
+    const contentContainer = document.getElementById("tutorialContent");
+    const progressText = document.getElementById("tutorialProgress");
+
+    contentContainer.innerHTML = tutorialContent[currentPage].content;
+    progressText.textContent = `الصفحة ${currentPage + 1} من ${totalPages}`;
+
+    // Update button states
+    prevBtn.disabled = currentPage === 0;
+    nextBtn.disabled = currentPage === totalPages - 1;
+
+    // Change next button text on last page
+    if (currentPage === totalPages - 1) {
+      nextBtn.textContent = "إنهاء";
+    } else {
+      nextBtn.textContent = "التالي";
+    }
+  }
+
+  trainingGuideBtn?.addEventListener("click", () => {
+    currentPage = 0;
+    updateTutorialContent();
+    showModal(trainingGuideModal);
+  });
+
+  closeBtn?.addEventListener("click", () => {
+    hideModal(trainingGuideModal);
+  });
+
+  startTutorialBtn?.addEventListener("click", () => {
+    currentPage = 0;
+    updateTutorialContent();
+  });
+
+  skipTutorialBtn?.addEventListener("click", () => {
+    hideModal(trainingGuideModal);
+  });
+
+  prevBtn?.addEventListener("click", () => {
+    if (currentPage > 0) {
+      currentPage--;
+      updateTutorialContent();
+    }
+  });
+
+  nextBtn?.addEventListener("click", () => {
+    if (currentPage < totalPages - 1) {
+      currentPage++;
+      updateTutorialContent();
+    } else {
+      hideModal(trainingGuideModal);
+      // Redirect to full tutorial page
+      window.location.href = "tutorial.html";
     }
   });
 }
