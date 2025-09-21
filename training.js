@@ -154,7 +154,7 @@ export const completeTrainingLevel = async function (level, score, timeSpent) {
   }
 };
 
-// --- Update Levels based on user progress ---
+ // --- Update Levels based on user progress ---
 export async function updateLevelsStatus(completedLevels = []) {
   // Determine current level (next level after last completed)
   const currentLevel =
@@ -185,7 +185,10 @@ export async function updateLevelsStatus(completedLevels = []) {
 
     // Update the visual appearance based on status
     const iconContainer = levelNode.querySelector(".w-16.h-16");
-    const statusText = levelNode.querySelector(".text-xs");
+    
+    // Use a more specific selector for the status text - it's the second <p> element in the text container
+    const textContainer = levelNode.querySelector(".text-center");
+    const statusText = textContainer ? textContainer.querySelector("p:last-child") : null;
 
     if (iconContainer && statusText) {
       if (isCompleted) {
@@ -197,8 +200,10 @@ export async function updateLevelsStatus(completedLevels = []) {
             <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
           </svg>
         `;
-        // statusText.className = "text-xs text-green-300";
-        // statusText.textContent = "مكتمل";
+        
+        // Update status text for completed level
+        statusText.className = "text-xs text-green-300 mt-1";
+        statusText.textContent = "مكتمل";
 
         // Remove frog avatar if it exists
         const frogAvatar = levelNode.querySelector(".absolute.-top-8");
@@ -214,8 +219,10 @@ export async function updateLevelsStatus(completedLevels = []) {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
           </svg>
         `;
-        // statusText.className = "text-xs text-blue-300";
-        // statusText.textContent = "متاح الآن";
+        
+        // Update status text for current level
+        statusText.className = "text-xs text-blue-300 mt-1";
+        statusText.textContent = "متاح الآن";
 
         // Add frog avatar
         if (!levelNode.querySelector(".absolute.-top-8")) {
@@ -239,8 +246,10 @@ export async function updateLevelsStatus(completedLevels = []) {
             <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/>
           </svg>
         `;
-        // statusText.className = "text-xs text-gray-500";
-        // statusText.textContent = "مقفل";
+        
+        // Update status text for locked level
+        statusText.className = "text-xs text-gray-500 mt-1";
+        statusText.textContent = "مقفل";
 
         // Remove frog avatar if it exists
         const frogAvatar = levelNode.querySelector(".absolute.-top-8");

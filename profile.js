@@ -97,22 +97,6 @@ export async function loadProfileData() {
       progressElement.textContent = `${completedLevels.length}/20`;
     }
 
-    // Progress bar
-    const progressPercent = (completedLevels.length / 20) * 100;
-
-    const progressBar = document.querySelector(
-      ".bg-gradient-to-r.from-blue-500.to-purple-600"
-    );
-    if (progressBar) {
-      progressBar.style.width = `${progressPercent}%`;
-    }
-
-    const progressText = document.querySelector(
-      ".flex.items-center.justify-between.mb-2 .text-sm.text-blue-200"
-    );
-    if (progressText) {
-      progressText.textContent = `${Math.round(progressPercent)}%`;
-    }
   } catch (error) {
     console.error("Error loading profile data:", error);
     // Show error toast
