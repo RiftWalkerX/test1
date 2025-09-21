@@ -64,7 +64,20 @@ function renderAchievements(achievements) {
     return;
   }
 
-  grid.innerHTML = achievements
+  // Map to objects if they are strings (from Firestore unlocked array)
+  const mappedAchievements = achievements.map((ach) => {
+    if (typeof ach === "string") {
+      return {
+        emoji: "🏆",
+        name: ach,
+        desc: "إنجاز مكتسب",
+      };
+    } else {
+      return ach;
+    }
+  });
+
+  grid.innerHTML = mappedAchievements
     .map(
       (ach) => `
     <div class="achievement-badge bg-surface-700/50 rounded-lg p-4 text-center">
@@ -125,6 +138,10 @@ function renderFriendsPreview(friends) {
           friend.points || 0
         )}</p>
         <p class="text-xs text-slate-400">نقطة</p>
+        <p class="text-accent-400 font-semibold">${formatNumberArabic(
+          friend.streak || 0
+        )}</p>
+        <p class="text-xs text-slate-400">سلسلة 🔥</p>
       </div>
       <div class="w-3 h-3 ${
         friend.status === "online" ? "bg-success-400" : "bg-slate-500"
@@ -172,6 +189,10 @@ function renderAllFriendsModal(friends) {
             friend.points || 0
           )}</p>
           <p class="text-xs text-slate-400">نقطة</p>
+          <p class="text-accent-400 font-semibold">${formatNumberArabic(
+            friend.streak || 0
+          )}</p>
+          <p class="text-xs text-slate-400">سلسلة 🔥</p>
         </div>
         <div class="w-3 h-3 ${
           friend.status === "online" ? "bg-success-400" : "bg-slate-500"
@@ -365,7 +386,7 @@ function initApp() {
         console.warn("No user data found in Firestore");
         // Create a basic user profile with minimal data
         updateValue("user-name", user.displayName || "مستخدم");
-        updateValue("user-title", "مستخدم جديد");
+        updateValue("user-title", "");
         updateValue(
           "user-join-date",
           `عضو منذ: ${new Date(user.metadata.creationTime).toLocaleDateString(
@@ -401,7 +422,7 @@ function initApp() {
         "user-name",
         data.displayName || user.displayName || "مستخدم"
       );
-      updateValue("user-title", data.title || "مستخدم جديد");
+      updateValue("user-title", data.title || "");
       updateValue(
         "user-join-date",
         `عضو منذ: ${
@@ -414,27 +435,25 @@ function initApp() {
       const avatarEl = document.getElementById("user-avatar");
       if (avatarEl) {
         // Use Firebase photoURL if available, otherwise keep the default
-        if (user.photoURL) {
-          avatarEl.src = user.photoURL;
+        if (data.photoURL || user.photoURL) {
+          avatarEl.src = data.photoURL || user.photoURL;
           avatarEl.onerror = function () {
             handleAvatarError(this);
           };
         }
       }
 
-      // Update stats
-      const totalPoints =
-        data.points || data.totalPoints || data.stats?.totalPoints || 0;
+      // Update stats from data.stats
+      const stats = data.stats || {};
+      const totalPoints = stats.totalPoints || data.totalPoints || 0;
       updateValue("total-points", formatNumberArabic(totalPoints));
 
-      const currentStreak =
-        data.streak || data.currentStreak || data.stats?.currentStreak || 0;
+      const currentStreak = stats.streak || data.streak || 0;
       updateValue("current-streak", formatNumberArabic(currentStreak));
 
       // Calculate accuracy rate
-      const totalCorrect =
-        data.stats?.total_correct || data.correctAnswers || 0;
-      const totalWrong = data.stats?.total_wrong || data.wrongAnswers || 0;
+      const totalCorrect = stats.total_correct || data.correctAnswers || 0;
+      const totalWrong = stats.total_wrong || data.wrongAnswers || 0; // If total_wrong not present, defaults to 0
       const totalAnswered = totalCorrect + totalWrong;
       const accuracyRate =
         totalAnswered > 0
@@ -445,37 +464,82 @@ function initApp() {
       updateValue("total-questions", formatNumberArabic(totalAnswered));
 
       // Update weekly chart
-      updateWeeklyChart(
-        data.weeklyStats || data.stats?.weekly || data.weekly || {}
-      );
+      updateWeeklyChart(stats.weekly || data.weeklyStats || data.weekly || {});
 
       // Update achievements
       const achievements =
         data.achievements?.unlocked || data.achievements || [];
       renderAchievements(achievements);
 
-      // Update friends
-      let friends = data.friends || [];
-      if (!Array.isArray(friends)) {
-        try {
-          const friendsQuery = query(
-            collection(db, "friends"),
-            where("owner", "==", user.uid),
-            orderBy("createdAt", "desc"),
-            limit(10)
-          );
-          const friendsSnap = await getDocs(friendsQuery);
-          friends = friendsSnap.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-            avatar: doc.data().photoURL || doc.data().avatar,
-            status: doc.data().status || "offline",
-            lastActive: doc.data().lastActive || "غير محدد",
-          }));
-        } catch (error) {
-          console.warn("Error fetching friends:", error);
-          friends = [];
-        }
+      // Update friends from top-level "friends" collection
+      let friends = [];
+      try {
+        const friendsQuery = query(
+          collection(db, "friends"),
+          where("userId", "==", user.uid),
+          orderBy("createdAt", "desc"),
+          limit(10)
+        );
+        const friendsSnap = await getDocs(friendsQuery);
+        friends = await Promise.all(
+          friendsSnap.docs.map(async (friendSnap) => {
+            const friendData = friendSnap.data();
+            // Fetch friend's user data
+            const friendUserRef = doc(db, "users", friendData.friendId);
+            const friendUserSnap = await getDoc(friendUserRef);
+            let friendUserData = {};
+            if (friendUserSnap.exists()) {
+              friendUserData = friendUserSnap.data();
+            }
+
+            let lastActive = null;
+            let lastActiveStr = "غير محدد";
+
+            // Parse lastActiveDate
+            if (friendUserData.lastActiveDate) {
+              if (friendUserData.lastActiveDate.toDate) {
+                lastActive = friendUserData.lastActiveDate.toDate();
+              } else if (typeof friendUserData.lastActiveDate === "string") {
+                lastActive = new Date(friendUserData.lastActiveDate);
+              }
+            }
+            // Fallback to lastLoginDate
+            else if (friendUserData.lastLoginDate) {
+              if (friendUserData.lastLoginDate.toDate) {
+                lastActive = friendUserData.lastLoginDate.toDate();
+              } else if (typeof friendUserData.lastLoginDate === "string") {
+                lastActive = new Date(friendUserData.lastLoginDate);
+              }
+            }
+
+            if (lastActive && !isNaN(lastActive.getTime())) {
+              lastActiveStr = lastActive.toLocaleString("ar-EG");
+            }
+
+            const isOnline =
+              lastActive &&
+              !isNaN(lastActive.getTime()) &&
+              Date.now() - lastActive.getTime() < 30 * 60 * 1000;
+
+            return {
+              id: friendSnap.id,
+              ...friendData,
+              displayName:
+                friendData.friendName || friendUserData.displayName || "صديق",
+              name:
+                friendData.friendName || friendUserData.displayName || "صديق",
+              photoURL: friendUserData.photoURL || null,
+              avatar: friendUserData.photoURL || null,
+              status: isOnline ? "online" : "offline",
+              lastActive: lastActiveStr,
+              points: friendUserData.stats?.totalPoints || 0,
+              streak: friendUserData.streak || 0,
+            };
+          })
+        );
+      } catch (error) {
+        console.warn("Error fetching friends:", error);
+        friends = [];
       }
       renderFriendsPreview(friends);
 
