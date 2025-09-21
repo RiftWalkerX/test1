@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>الملف الشخصي - Zero Fake</title>
+    <link rel="stylesheet" href="leader and profilestyle.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script
+      type="module"
+      src="https://static.rocket.new/rocket-web.js?_cfg=https%3A%2F%2Fzerofake5340back.builtwithrocket.new&_be=https%3A%2F%2Fapplication.rocket.new&_v=0.1.8"
+    ></script>
+  </head>
+  <body class="bg-background font-cairo">
+    <div class="min-h-screen flex flex-col">
+      <!-- Navigation -->
+      <nav class="glass-morphism p-4 mb-8">
+        <div class="flex items-center justify-between max-w-7xl mx-auto">
+          <div class="flex items-center gap-3">
+            <div class="text-2xl">🛡️</div>
+            <span class="text-xl font-bold text-white">Zero Fake</span>
+          </div>
+          <button
+            class="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-semibold"
+            onclick="window.location.href='./dashboard.html'"
+          >
+            لوحة التحكم
+          </button>
+        </div>
+      </nav>
+
+      <!-- Main Content -->
+      <div class="flex-1 max-w-7xl mx-auto px-4 w-full">
+        <!-- Profile Hero Section -->
+        <div class="glass-morphism rounded-2xl p-8 mb-8">
+          <!-- User Avatar & Basic Info -->
+          <div class="flex items-center gap-6 mb-8">
+            <div class="relative">
+              <img
+                id="user-avatar"
+                src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=120&h=120&crop=face"
+                alt="صورة المستخدم"
+                class="w-24 h-24 rounded-full border-4 border-accent-400"
+                onerror="handleAvatarError(this)"
+              />
+              <div
+                class="absolute -bottom-2 -right-2 w-8 h-8 bg-success-500 rounded-full flex items-center justify-center border-2 border-background"
+              >
+                <span class="text-white text-sm">✓</span>
+              </div>
+            </div>
+            <div class="flex-1">
+              <h1 id="user-name" class="text-3xl font-bold text-white mb-2"></h1>
+              <p id="user-title" class="text-lg text-accent-400 mb-2"></p>
+              <p id="user-join-date" class="text-sm text-slate-400"></p>
+            </div>
+            <div class="flex items-center gap-4">
+              <div class="text-center">
+                <p class="text-2xl font-bold text-accent-400" id="user-rank"></p>
+                <p class="text-sm text-slate-400">الترتيب</p>
+              </div>
+              <div class="text-4xl">🏆</div>
+            </div>
+          </div>
+
+          <!-- Statistics Cards -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-surface-700/50 rounded-lg p-4 text-center">
+              <div
+                class="text-2xl font-bold text-accent-400 mb-1"
+                id="total-points"
+              ></div>
+              <div class="text-sm text-slate-400">إجمالي النقاط</div>
+            </div>
+            <div class="bg-surface-700/50 rounded-lg p-4 text-center">
+              <div
+                class="text-2xl font-bold text-success-400 mb-1"
+                id="current-streak"
+              ></div>
+              <div class="text-sm text-slate-400">أيام متتالية</div>
+            </div>
+            <div class="bg-surface-700/50 rounded-lg p-4 text-center">
+              <div
+                class="text-2xl font-bold text-primary-400 mb-1"
+                id="accuracy-rate"
+              ></div>
+              <div class="text-sm text-slate-400">معدل الدقة</div>
+            </div>
+            <div class="bg-surface-700/50 rounded-lg p-4 text-center">
+              <div
+                class="text-2xl font-bold text-warning-400 mb-1"
+                id="total-questions"
+              ></div>
+              <div class="text-sm text-slate-400">الأسئلة المجابة</div>
+            </div>
+          </div>
+
+          <!-- Progress Chart -->
+          <div class="bg-surface-700/30 rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">الإحصائيات الأسبوعية</h3>
+            <div class="flex items-end justify-between h-32 gap-2">
+              <div class="flex flex-col items-center">
+                <div class="bg-accent-500 rounded-t w-8 h-8 mb-2" data-day="السبت"></div>
+                <span class="text-xs text-slate-400">الس</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="bg-accent-500 rounded-t w-8 h-8 mb-2" data-day="الأحد"></div>
+                <span class="text-xs text-slate-400">الأح</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="bg-accent-500 rounded-t w-8 h-8 mb-2" data-day="الإثنين"></div>
+                <span class="text-xs text-slate-400">الإث</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="bg-accent-500 rounded-t w-8 h-8 mb-2" data-day="الثلاثاء"></div>
+                <span class="text-xs text-slate-400">الثل</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="bg-accent-500 rounded-t w-8 h-8 mb-2" data-day="الأربعاء"></div>
+                <span class="text-xs text-slate-400">الأر</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="bg-accent-500 rounded-t w-8 h-8 mb-2" data-day="الخميس"></div>
+                <span class="text-xs text-slate-400">الخم</span>
+              </div>
+              <div class="flex flex-col items-center">
+                <div class="bg-accent-600 rounded-t w-8 h-8 mb-2" data-day="الجمعة"></div>
+                <span class="text-xs text-slate-400">الجم</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Achievements Section -->
+        <div class="glass-morphism rounded-2xl p-6 mb-8">
+          <h2 class="text-2xl font-bold text-white mb-6">الإنجازات المكتسبة</h2>
+          <div id="achievements-grid" class="grid grid-cols-2 md:grid-cols-4 gap-4"></div>
+        </div>
+
+        <!-- Friends Section -->
+        <div class="glass-morphism rounded-2xl p-6 mb-8">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-2xl font-bold text-white">الأصدقاء</h2>
+            <span id="friends-count" class="text-sm text-slate-400"></span>
+          </div>
+          <div id="friends-list" class="space-y-4"></div>
+          <button
+            id="show-all-friends"
+            class="w-full p-4 bg-surface-700/50 hover:bg-surface-700/70 rounded-lg text-white font-semibold transition-colors"
+          >
+            عرض جميع الأصدقاء
+          </button>
+        </div>
+
+        <!-- Account Management -->
+        <div class="glass-morphism rounded-2xl p-6 mb-8">
+          <h2 class="text-2xl font-bold text-white mb-6">إدارة الحساب</h2>
+          <div class="space-y-4">
+            <!-- Sign Out Button -->
+            <button
+              id="sign-out-btn"
+              class="w-full flex items-center justify-center gap-3 p-4 bg-warning-600 hover:bg-warning-700 text-white font-semibold rounded-lg transition-colors"
+            >
+              <span class="text-xl">🚪</span>
+              تسجيل الخروج
+            </button>
+
+            <!-- Delete Account Button -->
+            <button
+              id="delete-account-btn"
+              class="w-full flex items-center justify-center gap-3 p-4 bg-error-600/80 hover:bg-error-600 text-white font-semibold rounded-lg transition-colors"
+            >
+              <span class="text-xl">⚠️</span>
+              حذف الحساب نهائياً
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <footer class="mt-auto p-4">
+        <p class="text-center text-slate-400 text-sm">
+          © 2025 زيرو فيك • مبنية لأغراض تعليمية
+        </p>
+      </footer>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div
+      id="confirmation-modal"
+      class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+    >
+      <div class="glass-morphism rounded-2xl p-8 max-w-md w-full">
+        <h3
+          id="modal-title"
+          class="text-xl font-bold text-white mb-4 text-center"
+        ></h3>
+        <p id="modal-message" class="text-slate-300 mb-6 text-center"></p>
+        <div class="flex gap-4">
+          <button
+            id="modal-cancel"
+            class="flex-1 p-3 bg-surface-700 hover:bg-surface-600 text-white font-semibold rounded-lg transition-colors"
+          >
+            إلغاء
+          </button>
+          <button
+            id="modal-confirm"
+            class="flex-1 p-3 bg-error-600 hover:bg-error-700 text-white font-semibold rounded-lg transition-colors"
+          >
+            تأكيد
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- All Friends Modal -->
+    <div
+      id="all-friends-modal"
+      class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+    >
+      <div
+        class="glass-morphism rounded-2xl p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+      >
+        <div class="flex items-center justify-between mb-6">
+          <h3 class="text-xl font-bold text-white">جميع الأصدقاء</h3>
+          <button
+            id="close-friends-modal"
+            class="text-2xl text-slate-400 hover:text-white transition-colors"
+          >
+            &times;
+          </button>
+        </div>
+        <div id="all-friends-list" class="space-y-4"></div>
+      </div>
+    </div>
+
+    <script>
+      // Handle avatar loading errors
+      function handleAvatarError(img) {
+        console.log("Avatar image failed to load, using fallback");
+        img.src = "img.svg";
+        img.onerror = null; // Prevent infinite loop if fallback also fails
+      }
+    </script>
+
+    <script type="module" src="./user_profile.js"></script>
+  </body>
+</html>
