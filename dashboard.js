@@ -1,7 +1,6 @@
 import { auth, db } from "./firebase-init.js";
 import {
   loadFriendRequests,
-  loadFriendsList,
   sendFriendRequest,
 } from "./friends.js";
 import { loadRoomInvites, setupRoomInviteListener } from "./room-invites.js";
@@ -23,12 +22,8 @@ document.addEventListener("DOMContentLoaded", async function () {
       return;
     }
 
-    // Load profile data
     await loadProfileData();
-
-    // Load other features
     loadFriendRequests();
-    loadFriendsList();
     loadRoomInvites();
     setupRoomInviteListener();
     checkDailyStreak(user.uid);
@@ -56,27 +51,8 @@ function setupUIEventListeners() {
     });
   }
 
-  // Friends functionality
-  document
-    .getElementById("friendRequestsBtn")
-    ?.addEventListener("click", () => {
-      loadFriendRequests();
-      toggleNotification("friend-request-notification");
-    });
-
-  document.getElementById("viewFriendsBtn")?.addEventListener("click", () => {
-    loadFriendsList();
-    toggleNotification("friends-list");
-  });
-
   // Add friend modal
   setupAddFriendModal();
-
-  // Room invites
-  document.getElementById("roomInvitesBtn")?.addEventListener("click", () => {
-    loadRoomInvites();
-    toggleNotification("room-invite-notification");
-  });
 
   // Level nodes
   document.querySelectorAll(".level-node").forEach((node) => {

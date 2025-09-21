@@ -191,47 +191,34 @@
       </div>
     </header>
 
-    <!-- Notifications Panel -->
-    <div class="relative z-40 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
-      <!-- Friend Requests Notification - Hidden by default, will show when requests exist -->
-      <div
-        id="friend-request-notification"
-        class="hidden bg-blue-500/20 backdrop-blur-lg border border-blue-400/30 rounded-lg p-4 mb-4"
-      >
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-lg font-bold text-white">طلبات الصداقة</h3>
-        </div>
-        <div id="friendRequestsList">
-          <!-- Friend requests will be populated here -->
-        </div>
-      </div>
-
-      <!-- Room Invites Notification - Hidden by default, will show when invites exist -->
-      <div
-        id="room-invite-notification"
-        class="hidden bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-lg border border-purple-400/30 rounded-xl p-4 mb-4 shadow-lg"
-      >
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-lg font-bold text-white">دعوات الغرف</h3>
-        </div>
-        <div id="roomInvitesList">
-          <!-- Room invites will be populated here -->
-        </div>
-      </div>
-
-      <!-- Friends List - Hidden by default, will show when friends exist -->
-      <div
-        id="friends-list"
-        class="hidden bg-green-500/20 backdrop-blur-lg border border-green-400/30 rounded-lg p-4 mb-4"
-      >
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-lg font-bold text-white">قائمة الأصدقاء</h3>
-        </div>
-        <div id="friendsListContent">
-          <!-- Friends list will be populated here -->
-        </div>
-      </div>
+<!-- Notifications Panel -->
+<div class="relative z-40 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+  <!-- Friend Requests Notification - Hidden by default, will show when requests exist -->
+  <div
+    id="friend-request-notification"
+    class="hidden bg-blue-500/20 backdrop-blur-lg border border-blue-400/30 rounded-lg p-4 mb-4"
+  >
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-lg font-bold text-white">طلبات الصداقة</h3>
     </div>
+    <div id="friendRequestsList">
+      <!-- Friend requests will be populated here -->
+    </div>
+  </div>
+
+  <!-- Room Invites Notification - Hidden by default, will show when invites exist -->
+  <div
+    id="room-invite-notification"
+    class="hidden bg-gradient-to-r from-purple-500/10 to-pink-500/10 backdrop-blur-lg border border-purple-400/30 rounded-xl p-4 mb-4 shadow-lg"
+  >
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-lg font-bold text-white">دعوات الغرف</h3>
+    </div>
+    <div id="roomInvitesList">
+      <!-- Room invites will be populated here -->
+    </div>
+  </div>
+</div>
 
     <!-- Main Content -->
     <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -430,34 +417,6 @@
                 <div class="flex-1">
                   <p class="text-white font-medium">إضافة صديق</p>
                   <p class="text-blue-200 text-sm">ابحث عن أصدقاء جدد</p>
-                </div>
-              </button>
-
-              <!-- View Friends Button -->
-              <button
-                id="viewFriendsBtn"
-                class="w-full flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-lg transition-all duration-200 text-right"
-              >
-                <div
-                  class="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center"
-                >
-                  <svg
-                    class="w-4 h-4 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"
-                    />
-                  </svg>
-                </div>
-                <div class="flex-1">
-                  <p class="text-white font-medium">قائمة الأصدقاء</p>
-                  <p class="text-blue-200 text-sm">عرض أصدقائك</p>
                 </div>
               </button>
             </div>

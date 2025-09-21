@@ -89,37 +89,15 @@ export const loadRoomInvites = async function () {
     document.getElementById("roomInviteCount")?.classList.add("hidden");
     return;
   }
+  invitesList.innerHTML = "";
 
-  notificationContainer.innerHTML = `
-    <div class="flex items-center justify-between mb-6">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full flex items-center justify-center">
-          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-          </svg>
-        </div>
-        <div>
-          <h4 class="text-xl font-bold text-white">دعوات الغرف</h4>
-          <p class="text-purple-200 text-sm">انضم لجلسات التدريب الجماعية</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500 text-white">
-          ${querySnapshot.size} دعوات
-        </span>
-      </div>
-    </div>
-    <div class="space-y-4" id="room-invites-list"></div>
-  `;
-  const invitesList = document.getElementById("room-invites-list");
-  let inviteCount = 0;
   for (const docSnapshot of querySnapshot.docs) {
     const invite = docSnapshot.data();
     const fromUserRef = doc(db, "users", invite.fromUserId);
     const fromUserDoc = await getDoc(fromUserRef);
     if (fromUserDoc.exists()) {
       const fromUserData = fromUserDoc.data();
-      inviteCount++;
+
       const inviteElement = document.createElement("div");
       inviteElement.className =
         "group relative overflow-hidden bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-sm border border-white/20 rounded-2xl p-5 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300";
@@ -138,7 +116,7 @@ export const loadRoomInvites = async function () {
                   invite.quizType || "تدريب جماعي"
                 }</h5>
                 <p class="text-purple-200 text-sm">دعوة من ${
-                  fromUserData.displayName || "مستخدم"
+                  fromUserData.fromUserName || "مستخدم"
                 }</p>
               </div>
             </div>
@@ -171,12 +149,7 @@ export const loadRoomInvites = async function () {
       invitesList.appendChild(inviteElement);
     }
   }
-  // Update notification badge
-  const roomInviteCount = document.getElementById("roomInviteCount");
-  if (roomInviteCount) {
-    roomInviteCount.textContent = inviteCount;
-    roomInviteCount.classList.remove("hidden");
-  }
+
   notificationContainer.classList.remove("hidden");
 };
 

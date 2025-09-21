@@ -25,17 +25,18 @@ export async function loadFriendRequests() {
 
   const querySnapshot = await getDocs(q);
   const notification = document.getElementById("friend-request-notification");
-  if (!notification) return;
+  const requestsList = document.getElementById("friendRequestsList");
+  
+  if (!notification || !requestsList) return;
 
   if (querySnapshot.empty) {
     notification.classList.add("hidden");
-    document.getElementById("friendRequestCount")?.classList.add("hidden");
     return;
   }
 
-  notification.innerHTML =
-    "<h4 class='text-white font-bold mb-4'>طلبات الصداقة:</h4>";
+  requestsList.innerHTML = "";
   let requestCount = 0;
+  
   for (const docSnapshot of querySnapshot.docs) {
     const request = docSnapshot.data();
     const fromUserRef = doc(db, "users", request.fromUserId);
@@ -44,31 +45,24 @@ export async function loadFriendRequests() {
     if (fromUserDoc.exists()) {
       const fromUserData = fromUserDoc.data();
       requestCount++;
+      
       const requestElement = document.createElement("div");
-      requestElement.className =
-        "friend-request mb-3 p-3 bg-white/10 rounded-lg";
+      requestElement.className = "mb-3 p-3 bg-white/10 rounded-lg";
       requestElement.innerHTML = `
         <p class="text-white mb-2">طلب صداقة من: <strong>${
           fromUserData.displayName || "مستخدم غير معروف"
         }</strong></p>
         <div class="flex gap-2">
-          <button class="btn-accept bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm" onclick="acceptFriendRequest('${
+          <button class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm" onclick="acceptFriendRequest('${
             docSnapshot.id
           }', '${request.fromUserId}')">قبول</button>
-          <button class="btn-deny bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm" onclick="denyFriendRequest('${
+          <button class="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm" onclick="denyFriendRequest('${
             docSnapshot.id
           }')">رفض</button>
         </div>
       `;
-      notification.appendChild(requestElement);
+      requestsList.appendChild(requestElement);
     }
-  }
-
-  // Update notification count
-  const friendRequestCount = document.getElementById("friendRequestCount");
-  if (friendRequestCount) {
-    friendRequestCount.textContent = requestCount;
-    friendRequestCount.classList.remove("hidden");
   }
 
   notification.classList.remove("hidden");
@@ -145,7 +139,6 @@ window.acceptFriendRequest = async (requestId, fromUserId) => {
     document
       .getElementById("friend-request-notification")
       ?.classList.add("hidden");
-    await loadFriendsList();
     document.dispatchEvent(
       new CustomEvent("showToast", {
         detail: {
