@@ -1,4 +1,3 @@
-
 import { auth, db } from "./firebase-init.js";
 import {
   doc,
@@ -6,7 +5,7 @@ import {
   updateDoc,
   setDoc,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
+import { updateLevelsStatus } from "./training.js";
 export async function loadProfileData() {
   const user = auth.currentUser;
   if (!user) return;
@@ -60,7 +59,9 @@ export async function loadProfileData() {
     });
 
     // Update display name in main content (the empty h3 element)
-    const mainDisplayName = document.querySelector(".text-center.mb-6 .text-lg.font-bold.text-white");
+    const mainDisplayName = document.querySelector(
+      ".text-center.mb-6 .text-lg.font-bold.text-white"
+    );
     if (mainDisplayName) {
       mainDisplayName.textContent = displayName;
     }
@@ -69,7 +70,9 @@ export async function loadProfileData() {
     const stats = userData.stats || { totalPoints: 0 };
     const streak = userData.streak || 0;
     const completedLevels = userData.completedLevels || [];
-
+    if (typeof updateLevelsStatus === "function") {
+      await updateLevelsStatus(completedLevels);
+    }
     // Total points
     const pointsElement = document.querySelector(
       ".text-2xl.font-bold.text-yellow-400"

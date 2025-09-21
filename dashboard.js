@@ -6,8 +6,8 @@ import {
 } from "./friends.js";
 import { loadRoomInvites, setupRoomInviteListener } from "./room-invites.js";
 import { checkDailyStreak } from "./streak.js";
-import { handleLevelClick } from "./training.js";
 import { loadProfileData } from "./profile.js";
+import { updateLevelsStatus, handleLevelClick } from "./training.js";
 
 // Dashboard initialization and event listeners
 document.addEventListener("DOMContentLoaded", async function () {

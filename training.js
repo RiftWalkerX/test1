@@ -76,21 +76,24 @@ export function getLevelData(level, completedLevels) {
     4: {
       title: "الصور المشبوهة",
       description: "تعلم كيفية تحليل الصور المزيفة والمعدلة",
-      icon: '<svg class="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z" clip-rule="evenodd"></path></svg>',
+      icon: '<svg class="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>',
       bgClass: "bg-gray-600",
     },
     // ...extend for more levels if needed...
   };
   const data = levelData[level];
   if (!data) return null;
-  
+
   // Status logic - FIXED: New users should start at level 1
   if (completedLevels.includes(level)) {
     data.status = "completed";
   } else if (level === 1 && completedLevels.length === 0) {
     // First level for new users
     data.status = "current";
-  } else if (completedLevels.length > 0 && level === completedLevels.length + 1) {
+  } else if (
+    completedLevels.length > 0 &&
+    level === completedLevels.length + 1
+  ) {
     // Next level after completed ones
     data.status = "current";
   } else if (level <= completedLevels.length) {
@@ -100,7 +103,7 @@ export function getLevelData(level, completedLevels) {
     // Future levels
     data.status = "locked";
   }
-  
+
   return data;
 }
 
@@ -162,7 +165,104 @@ export const completeTrainingLevel = async function (level, score, timeSpent) {
   }
 };
 
-// --- Modal helpers (copied for self-containment) ---
+// --- Update Levels based on user progress ---
+export async function updateLevelsStatus(completedLevels = []) {
+  // Determine current level (next level after last completed)
+  const currentLevel =
+    completedLevels.length > 0 ? Math.max(...completedLevels) + 1 : 1;
+
+  // Update each level node
+  for (let levelNumber = 1; levelNumber <= 20; levelNumber++) {
+    const levelNode = document.querySelector(
+      `.level-node[data-level="${levelNumber}"]`
+    );
+    if (!levelNode) continue;
+
+    const isCompleted = completedLevels.includes(levelNumber);
+    const isCurrent = levelNumber === currentLevel;
+    const isLocked = levelNumber > currentLevel;
+
+    // Remove all status classes
+    levelNode.classList.remove("completed", "current", "locked");
+
+    // Add the correct status class
+    if (isCompleted) {
+      levelNode.classList.add("completed");
+    } else if (isCurrent) {
+      levelNode.classList.add("current");
+    } else {
+      levelNode.classList.add("locked");
+    }
+
+    // Update the visual appearance based on status
+    const iconContainer = levelNode.querySelector(".w-16.h-16");
+    const statusText = levelNode.querySelector(".text-xs");
+
+    if (iconContainer && statusText) {
+      if (isCompleted) {
+        // Completed level - green checkmark
+        iconContainer.className =
+          "w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center shadow-lg border-4 border-green-400 cursor-pointer hover:scale-110 transition-all duration-300";
+        iconContainer.innerHTML = `
+          <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+          </svg>
+        `;
+        statusText.className = "text-xs text-green-300";
+        statusText.textContent = "مكتمل";
+
+        // Remove frog avatar if it exists
+        const frogAvatar = levelNode.querySelector(".absolute.-top-8");
+        if (frogAvatar) {
+          frogAvatar.remove();
+        }
+      } else if (isCurrent) {
+        // Current level - blue with frog
+        iconContainer.className =
+          "w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg border-4 border-blue-400 cursor-pointer hover:scale-110 transition-all duration-300 animate-pulse";
+        iconContainer.innerHTML = `
+          <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L极3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+          </svg>
+        `;
+        statusText.className = "text-xs text-blue-300";
+        statusText.textContent = "متاح الآن";
+
+        // Add frog avatar
+        if (!levelNode.querySelector(".absolute.-top-8")) {
+          const frogAvatar = document.createElement("div");
+          frogAvatar.className =
+            "absolute -top-8 left-1/2 transform -translate-x-1/2 animate-bounce";
+          frogAvatar.innerHTML = `
+            <div class="w-12 h-12 bg-gradient-to-r from-green-400 to-green-600 rounded-full flex items-center justify-center shadow-lg border-2 border-white">
+              <span class="text-lg">🐸</span>
+            </div>
+          `;
+          levelNode.querySelector(".relative").prepend(frogAvatar);
+        }
+      } else {
+        // Locked level - gray
+        iconContainer.className =
+          "w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center shadow-lg border-4 border-gray-500 opacity-50";
+        iconContainer.innerHTML = `
+          <svg class="w-8 h-8 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7极V7a3 3 0 616 极0z" clip-rule="evenodd"/>
+          </svg>
+        `;
+        statusText.className = "text-xs text-gray-500";
+        statusText.textContent = "مقفل";
+
+        // Remove frog avatar if it exists
+        const frogAvatar = levelNode.querySelector(".absolute.-top-8");
+        if (frogAvatar) {
+          frogAvatar.remove();
+        }
+      }
+    }
+  }
+}
+
+// --- Modal helpers ---
 function showModal(modal) {
   if (!modal) return;
   modal.classList.remove("opacity-0", "pointer-events-none");
@@ -172,6 +272,7 @@ function showModal(modal) {
     modalContent.classList.add("scale-100");
   }
 }
+
 function hideModal(modal) {
   if (!modal) return;
   modal.classList.add("opacity-0", "pointer-events-none");
