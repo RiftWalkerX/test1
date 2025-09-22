@@ -1567,6 +1567,42 @@ pre {
 .bg-gradient-to-r {
     background-image: linear-gradient(to right, var(--tw-gradient-stops));
 }
+/* Tutorial Overlay Styles */
+#tutorialOverlay {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+}
+
+#tutorialHighlight {
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7);
+    pointer-events: none;
+    z-index: 60;
+}
+
+#tutorialContent {
+    z-index: 70;
+}
+
+/* Pulse animation for highlighted elements */
+@keyframes tutorialPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7);
+    }
+
+    70% {
+        box-shadow: 0 0 0 10px rgba(234, 179, 8, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(234, 179, 8, 0);
+    }
+}
+
+.tutorial-highlight {
+    animation: tutorialPulse 2s infinite;
+    position: relative;
+    z-index: 80;
+}
 
 .from-blue-500 {
     --tw-gradient-from: #3b82f6 var(--tw-gradient-from-position);

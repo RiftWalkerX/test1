@@ -347,7 +347,8 @@
             <h3 class="text-lg font-bold text-white mb-4">إجراءات سريعة</h3>
             <div class="space-y-3">
               <button
-                id="openTrainingGuideBtn" class="w-full flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-lg transition-all duration-200 text-right"
+                id="openTrainingGuideBtn"
+                class="w-full flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-lg transition-all duration-200 text-right"
               >
                 <div
                   class="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center"
@@ -556,7 +557,7 @@
                     </div>
                     <!-- Glow effect -->
                     <div
-                      class="absolute inset-0 w-16 h-16 bg-blue-500 rounded-full opacity-30"
+                      class="absolute inset-0 w-16 h-16 bg-blue-500 rounded-full opacity-0"
                     ></div>
                   </div>
                   <div class="mt-3 text-center">
@@ -1311,7 +1312,7 @@
       class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 opacity-0 pointer-events-none transition-all duration-300 z-50"
     >
       <div
-        class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 max-w-4xl w-full border border-white/20 transform scale-95 transition-transform duration-300"
+        class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 max-w-md w-full border border-white/20 transform scale-95 transition-transform duration-300"
       >
         <div class="text-center mb-6">
           <div
@@ -1331,77 +1332,32 @@
               />
             </svg>
           </div>
-          <h3 class="text-2xl font-bold text-white mb-2">
+          <h3 class="text-2xl font-bold text-white mb-4">
             دليل التدريب الشامل
           </h3>
-          <p class="text-blue-200">
-            تعرف على كيفية استخدام المنصة والاستفادة القصوى منها
-          </p>
-        </div>
 
-        <div class="mb-6">
-          <div
-            id="tutorialContent"
-            class="bg-white/5 rounded-xl p-6 mb-4 min-h-[400px] flex items-center justify-center"
-          >
-            <!-- Tutorial content will be loaded here -->
-            <div class="text-center">
-              <div
-                class="w-20 h-20 mx-auto mb-4 bg-blue-500/20 rounded-full flex items-center justify-center"
-              >
-                <svg
-                  class="w-10 h-10 text-blue-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  ></path>
-                </svg>
-              </div>
-              <h4 class="text-xl font-bold text-white mb-2">
-                مرحبًا بك في دليل التدريب!
-              </h4>
-              <p class="text-blue-200">
-                سنساعدك في فهم كيفية استخدام منصة Zero Fake والاستفادة القصوى من
-                ميزاتها.
-              </p>
-            </div>
-          </div>
-
-          <div class="flex justify-between items-center">
-            <div id="tutorialProgress" class="text-blue-200 text-sm">
-              الصفحة 1 من 8
-            </div>
-            <div class="flex gap-3">
-              <button
-                id="prevTutorialBtn"
-                class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-medium rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled
-              >
-                السابق
-              </button>
-              <button
-                id="nextTutorialBtn"
-                class="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-medium rounded-lg transition-all duration-200"
-              >
-                التالي
-              </button>
-              <button
-                id="skipTutorialBtn"
-                class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-medium rounded-lg transition-all duration-200"
-              >
-                تخطي الدليل
-              </button>
-            </div>
+          <div class="bg-white/5 rounded-xl p-6 mb-6">
+            <p class="text-blue-200 text-lg leading-relaxed">
+              انطلق في جولة تفاعلية عبر منصة Zero Fake مع دليلنا التدريبي
+              المتطور. ستتعلم من خلال تجربة عملية كيفية:
+            </p>
+            <ul
+              class="list-disc list-inside text-blue-200 mt-4 space-y-2 text-right"
+            >
+              <li>استكشاف لوحة التحكم ومتابعة تقدمك الشخصي</li>
+              <li>التفاعل مع المستويات التدريبية المتنوعة</li>
+              <li>تحقيق النقاط والحفاظ على سلسلة إنجازاتك</li>
+              <li>الانضمام إلى غرف التدريب الجماعي مع أصدقائك</li>
+              <li>إتقان استخدام جميع ميزات المنصة بكفاءة</li>
+            </ul>
+            <p class="text-blue-200 mt-4 leading-relaxed">
+              يتميز الدليل بإرشادات مرئية ديناميكية تسلط الضوء على العناصر
+              الرئيسية في المنصة، مما يضمن تجربة تعليمية سلسة وشاملة.
+            </p>
           </div>
         </div>
 
-        <div class="flex gap-3 pt-4 border-t border-white/20">
+        <div class="flex gap-3">
           <button
             id="startTutorialBtn"
             class="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200"
@@ -1417,8 +1373,59 @@
         </div>
       </div>
     </div>
+<<<<<<< HEAD
 
     <!-- Import Firebase Config & your scripts -->
+=======
+    <!-- Interactive Tutorial Overlay -->
+    <div id="tutorialOverlay" class="fixed inset-0 z-50 hidden">
+      <!-- Highlight elements with a semi-transparent overlay -->
+      <div
+        id="tutorialHighlight"
+        class="absolute rounded-lg border-2 border-yellow-400 shadow-lg shadow-yellow-500/50 z-50 transition-all duration-300"
+      ></div>
+
+      <!-- Tutorial content box that follows the highlighted element -->
+      <div
+        id="tutorialContent"
+        class="absolute bg-gray-800/95 backdrop-blur-sm border border-yellow-400 rounded-lg p-4 shadow-lg z-50 min-w-[300px] max-w-[400px] transition-all duration-300"
+      >
+        <div class="flex items-start mb-3">
+          <div
+            class="w-6 h-6 bg-yellow-500 rounded-full flex items-center justify-center mr-2 flex-shrink-0"
+          >
+            <span id="tutorialStepNumber" class="text-white font-bold text-sm"
+              >1</span
+            >
+          </div>
+          <h3 id="tutorialTitle" class="text-white font-bold text-lg"></h3>
+        </div>
+        <p id="tutorialDescription" class="text-gray-300 mb-4"></p>
+        <div class="flex justify-between">
+          <button
+            id="tutorialPrev"
+            class="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+          >
+            السابق
+          </button>
+          <div class="flex gap-2">
+            <button
+              id="tutorialSkip"
+              class="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              تخطي
+            </button>
+            <button
+              id="tutorialNext"
+              class="px-4 py-2 bg-yellow-500 text-gray-900 font-medium rounded-lg hover:bg-yellow-400 transition-colors"
+            >
+              التالي
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+>>>>>>> b902df0 (6.3)
     <script type="module" src="firebase-init.js"></script>
     <script type="module" src="dashboard.js"></script>
     <script type="module" src="friends.js"></script>
@@ -1426,5 +1433,6 @@
     <script type="module" src="profile.js"></script>
     <script type="module" src="room-invites.js"></script>
     <script type="module" src="training.js"></script>
+    <script type="module" src="tutorial.js"></script>
   </body>
 </html>

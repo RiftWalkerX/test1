@@ -5,6 +5,7 @@ import { loadRoomInvites, setupRoomInviteListener } from "./room-invites.js";
 import { checkDailyStreak } from "./streak.js";
 import { loadProfileData } from "./profile.js";
 import { updateLevelsStatus, handleLevelClick } from "./training.js";
+<<<<<<< HEAD
 
 // Update profile images & display name using auth.currentUser (falls back to img.svg)
 function updateProfileImages() {
@@ -27,6 +28,9 @@ function updateProfileImages() {
   if (displayNameEl) displayNameEl.textContent = displayName;
 }
 
+=======
+import { startTutorial } from "./tutorial.js";
+>>>>>>> b902df0 (6.3)
 // Dashboard initialization and event listeners
 document.addEventListener("DOMContentLoaded", async function () {
   // If already signed in, load profile & update images immediately
@@ -96,6 +100,15 @@ function setupUIEventListeners() {
     if (e.key === "Escape") {
       hideModal(document.getElementById("levelModal"));
       hideModal(document.getElementById("addFriendModal"));
+      hideModal(document.getElementById("joinRoomModal"));
+      hideModal(document.getElementById("trainingGuideModal"));
+
+      // Also close tutorial if it's open
+      const tutorialOverlay = document.getElementById("tutorialOverlay");
+      if (tutorialOverlay && !tutorialOverlay.classList.contains("hidden")) {
+        endTutorial();
+      }
+
       settingsMenu?.classList.add("opacity-0", "pointer-events-none");
     }
   });
@@ -140,6 +153,7 @@ function setupTrainingGuideModal() {
   const trainingGuideModal = document.getElementById("trainingGuideModal");
   const closeBtn = document.getElementById("closeTrainingGuideBtn");
   const startTutorialBtn = document.getElementById("startTutorialBtn");
+<<<<<<< HEAD
   const skipTutorialBtn = document.getElementById("skipTutorialBtn");
   const prevBtn = document.getElementById("prevTutorialBtn");
   const nextBtn = document.getElementById("nextTutorialBtn");
@@ -163,10 +177,10 @@ function setupTrainingGuideModal() {
     if (currentPage === totalPages - 1) nextBtn.textContent = "إنهاء";
     else nextBtn.textContent = "التالي";
   }
+=======
+>>>>>>> b902df0 (6.3)
 
   trainingGuideBtn?.addEventListener("click", () => {
-    currentPage = 0;
-    updateTutorialContent();
     showModal(trainingGuideModal);
   });
 
@@ -174,6 +188,7 @@ function setupTrainingGuideModal() {
     hideModal(trainingGuideModal);
   });
 
+<<<<<<< HEAD
   startTutorialBtn?.addEventListener("click", () => {
     currentPage = 0;
     updateTutorialContent();
@@ -201,6 +216,15 @@ function setupTrainingGuideModal() {
   });
 }
 
+=======
+  startTutorialBtn?.addEventListener("click", startTutorial);
+}
+
+// Update the startTutorialBtn event listener
+document
+  .getElementById("startTutorialBtn")
+  .addEventListener("click", startTutorial);
+>>>>>>> b902df0 (6.3)
 function setupJoinRoomModal() {
   const joinRoomBtn = document.getElementById("openJoinRoomModalBtn");
   const joinRoomModal = document.getElementById("joinRoomModal");
