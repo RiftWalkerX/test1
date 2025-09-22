@@ -1567,43 +1567,64 @@ pre {
 .bg-gradient-to-r {
     background-image: linear-gradient(to right, var(--tw-gradient-stops));
 }
-/* Tutorial Overlay Styles */
+/* Enhanced tutorial styles */
 #tutorialOverlay {
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0);
+    /* backdrop-filter: blur(2px); */
 }
 
 #tutorialHighlight {
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.7);
-    pointer-events: none;
-    z-index: 60;
+    /* backdrop-filter: blur(2px); */
+    background: rgba(255, 255, 255, 0);
+    border: 2px solid #fbbf24 !important;
+    box-shadow:
+        0 0 0 9999px rgba(0, 0, 0, 0.7),
+        0 0 30px 10px rgba(251, 191, 36, 0.4) !important;
+    animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+
+    0%,
+    100% {
+        box-shadow:
+            0 0 0 9999px rgba(0, 0, 0, 0.7),
+            0 0 30px 10px rgba(251, 191, 36, 0.4);
+    }
+
+    50% {
+        box-shadow:
+            0 0 0 9999px rgba(0, 0, 0, 0.7),
+            0 0 40px 15px rgba(251, 191, 36, 0.6);
+    }
 }
 
 #tutorialContent {
-    z-index: 70;
+    z-index: 1001;
+    backdrop-filter: blur(10px);
 }
 
-/* Pulse animation for highlighted elements */
-@keyframes tutorialPulse {
-    0% {
-        box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.7);
+/* Disabled button styles */
+#tutorialPrev:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+@keyframes slide-up {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 20px);
     }
 
-    70% {
-        box-shadow: 0 0 0 10px rgba(234, 179, 8, 0);
-    }
-
-    100% {
-        box-shadow: 0 0 0 0 rgba(234, 179, 8, 0);
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
     }
 }
 
-.tutorial-highlight {
-    animation: tutorialPulse 2s infinite;
-    position: relative;
-    z-index: 80;
+.animate-slide-up {
+    animation: slide-up 0.3s ease-out;
 }
-
 .from-blue-500 {
     --tw-gradient-from: #3b82f6 var(--tw-gradient-from-position);
     --tw-gradient-to: rgb(59 130 246 / 0) var(--tw-gradient-to-position);

@@ -15,22 +15,6 @@ const tutorialSteps = [
     position: "bottom",
     highlightPadding: 16,
   },
-
-  {
-    elementId: "addFriendBtn",
-    title: "إضافة صديق",
-    description: "أضف أصدقاء جدد للتدريب معهم ومشاركة التحديات.",
-    position: "right",
-    highlightPadding: 16,
-  },
-  {
-    elementId: "openJoinRoomModalBtn",
-    title: "الانضمام إلى غرفة",
-    description:
-      "انضم إلى غرف التدريب الجماعي باستخدام رمز الغرفة للتدريب مع الآخرين.",
-    position: "right",
-    highlightPadding: 16,
-  },
   {
     elementSelector:
       ".bg-white\\/10.backdrop-blur-lg.rounded-2xl.p-6.border.border-white\\/20",
@@ -38,6 +22,29 @@ const tutorialSteps = [
     description: "تابع تقدمك، نقاطك، وسلسلة إنجازاتك اليومية هنا.",
     position: "left",
     highlightPadding: 20,
+  },
+  {
+    elementId: "createRoomBtn",
+    title: "إنشاء غرفة",
+    description: "أنشئ غرفة تدريب جماعية جديدة وادعُ أصدقاءك للانضمام.",
+    position: "right",
+    highlightPadding: 16,
+  },
+
+  {
+    elementId: "joinRoomBtn",
+    title: "الانضمام إلى غرفة",
+    description:
+      "انضم إلى غرف التدريب الجماعي باستخدام رمز الغرفة للتدريب مع الآخرين.",
+    position: "right",
+    highlightPadding: 16,
+  },
+  {
+    elementId: "addFriendBtn",
+    title: "إضافة صديق",
+    description: "أضف أصدقاء جدد للتدريب معهم ومشاركة التحديات.",
+    position: "right",
+    highlightPadding: 16,
   },
   {
     elementId: "roadmapContainer",
