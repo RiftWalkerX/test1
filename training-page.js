@@ -1,27 +1,47 @@
+// training-page.js
 import { auth, db } from "./firebase-init.js";
 import {
   doc,
   updateDoc,
   getDoc,
-  increment,
   arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// Utility to create Set.difference for older browsers
-Set.prototype.difference = function (otherSet) {
-  const diff = new Set(this);
-  for (const elem of otherSet) {
-    diff.delete(elem);
-  }
-  return diff;
-};
+/* ===========================
+   Small utilities & polyfills
+   =========================== */
+if (!Set.prototype.difference) {
+  Set.prototype.difference = function (otherSet) {
+    const diff = new Set(this);
+    for (const elem of otherSet) {
+      diff.delete(elem);
+    }
+    return diff;
+  };
+}
 
+function showToast(message, type = "info") {
+  document.dispatchEvent(
+    new CustomEvent("showToast", { detail: { message, type } })
+  );
+}
+
+/* ===========================
+   Level generation (fetch + mapping)
+   =========================== */
 async function generateLevels() {
   try {
+    const now = Date.now();
     const [smsRes, dialogueRes, imageRes] = await Promise.all([
-      fetch("https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=" + Date.now()),
-      fetch("https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=" + Date.now()),
-      fetch("https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=" + Date.now())
+      fetch(
+        `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${now}`
+      ),
+      fetch(
+        `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${now}`
+      ),
+      fetch(
+        `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${now}`
+      ),
     ]);
 
     if (!smsRes.ok || !dialogueRes.ok || !imageRes.ok) {
@@ -32,177 +52,203 @@ async function generateLevels() {
     const dialogues = await dialogueRes.json();
     const images = await imageRes.json();
 
-    console.log("SMS parsed:", sms.length, "items");
-    console.log("Dialogues parsed:", dialogues.length, "items");
-    console.log("Images parsed:", images.length, "items");
-
-    // Map JSON structure to match expected format
-    const mappedSms = sms.map(s => ({
-      type: "sms",
-      content: s.text,
-      sender: s.sender,
-      timestamp: "الآن",
-      correctAnswer: s.isPhish ? "phishing" : "safe",
-      difficulty: assignHardness(s),
-      explanation: s.explanation
-    }));
-
-    const mappedDialogues = dialogues.map(d => ({
-      type: "dialogue",
-      messages: d.messages.map(m => ({
-        text: m.text,
-        sender: m.sender === "you" ? "user" : m.sender,
-        isPhishing: m.isPhish
-      })),
-      difficulty: assignHardness(d),
-      explanation: d.explanation || (d.isPhish ? "المحادثة تحتوي على رسائل احتيالية." : "المحادثة آمنة.")
-    }));
-
-    const mappedImages = images.map(i => ({
-      type: "image",
-      imageUrl: i.text,
-      description: i.title,
-      correctAnswer: i.isPhish ? "phishing" : "safe",
-      difficulty: assignHardness(i),
-      explanation: i.explanation
-    }));
-
-    let allScenarios = [...mappedSms, ...mappedDialogues, ...mappedImages];
-    console.log("Total scenarios:", allScenarios.length);
-
-    function assignHardness(scenario) {
-      let hardness = 1; // Base
-      const phishKeywords = ['urgent', 'prize', 'login', 'password', 'verify', 'win', 'free', 'كسبت', 'مبروك', 'جايزة', 'ادخل', 'بياناتك', 'رابط', 'تحديث'];
-      let content = '';
-      if (scenario.type === 'dialogue') {
-        content = scenario.messages ? scenario.messages.map(m => m.text).join(' ') : '';
-        hardness += (scenario.messages?.length || 0) / 2;
-      } else if (scenario.type === 'sms') {
-        content = scenario.text || scenario.content || '';
-      } else if (scenario.type === 'image') {
-        content = (scenario.title || '') + ' ' + (scenario.explanation || '');
-        hardness += 2;
-      }
-
-      phishKeywords.forEach(kw => {
-        if (content.toLowerCase().includes(kw.toLowerCase())) hardness += 1;
-      });
-
-      return Math.min(5, Math.floor(hardness));
+    function mapSms(s) {
+      return {
+        id: s.id ?? null,
+        type: "sms",
+        content: s.text ?? s.content ?? "",
+        sender: s.sender ?? "جهة مجهولة",
+        timestamp: s.timestamp ?? "الآن",
+        correctAnswer: s.isPhish ? "phishing" : "safe",
+        difficulty: 1,
+        explanation: s.explanation ?? "",
+      };
+    }
+    function mapDialogue(d) {
+      return {
+        id: d.id ?? null,
+        type: "dialogue",
+        messages: (d.messages ?? []).map((m) => ({
+          text: m.text ?? "",
+          sender: m.sender === "you" ? "user" : m.sender ?? "other",
+          isPhishing: !!m.isPhish,
+        })),
+        difficulty: 1,
+        explanation:
+          d.explanation ??
+          (d.isPhish ? "المحادثة تحتوي على رسائل احتيالية." : "المحادثة آمنة."),
+      };
+    }
+    function mapImage(i) {
+      return {
+        id: i.id ?? null,
+        type: "image",
+        imageUrl: i.text ?? i.imageUrl ?? "",
+        description: i.title ?? i.description ?? "",
+        correctAnswer: i.isPhish ? "phishing" : "safe",
+        difficulty: 3,
+        explanation: i.explanation ?? "",
+      };
     }
 
-    allScenarios.forEach((s) => {
-      s.difficulty = assignHardness(s); // Ensure consistency
-      console.log(`Scenario ${s.id || s.content?.slice(0, 10)} (${s.type}): Difficulty = ${s.difficulty}`);
-    });
+    const mappedSms = sms.map(mapSms);
+    const mappedDialogues = dialogues.map(mapDialogue);
+    const mappedImages = images.map(mapImage);
 
+    function assignHardness(item) {
+      let hardness = 1;
+      const phishKeywords = [
+        "urgent",
+        "prize",
+        "login",
+        "password",
+        "verify",
+        "win",
+        "free",
+        "كسبت",
+        "مبروك",
+        "جايزة",
+        "ادخل",
+        "بياناتك",
+        "رابط",
+        "تحديث",
+      ];
+      let contentText = "";
+
+      if (item.type === "dialogue") {
+        contentText = item.messages.map((m) => m.text).join(" ");
+        hardness += Math.min(3, Math.floor((item.messages?.length || 0) / 2));
+      } else if (item.type === "sms") {
+        contentText = item.content || "";
+      } else if (item.type === "image") {
+        contentText = `${item.description} ${item.explanation || ""}`;
+        hardness += 1;
+      }
+
+      phishKeywords.forEach((kw) => {
+        if (contentText.toLowerCase().includes(kw.toLowerCase())) hardness += 1;
+      });
+
+      return Math.max(1, Math.min(5, Math.floor(hardness)));
+    }
+
+    const allScenarios = [...mappedSms, ...mappedDialogues, ...mappedImages];
+    allScenarios.forEach((s) => (s.difficulty = assignHardness(s)));
     allScenarios.sort((a, b) => a.difficulty - b.difficulty);
 
     const levels = {};
     for (let i = 1; i <= 20; i++) levels[i] = [];
 
-    // Distribute images
     const imageScenarios = allScenarios.filter((s) => s.type === "image");
     imageScenarios.forEach((img, idx) => {
-      const levelNum = Math.min(20, Math.floor((idx * 20) / imageScenarios.length) + 1);
+      const levelNum = Math.min(
+        20,
+        Math.floor((idx * 20) / Math.max(1, imageScenarios.length)) + 1
+      );
       levels[levelNum].push(img);
     });
 
-    // Distribute non-images
-    let nonImageScenarios = allScenarios.filter((s) => s.type !== "image");
-    nonImageScenarios.forEach((scenario, idx) => {
+    const nonImages = allScenarios.filter((s) => s.type !== "image");
+    nonImages.forEach((scenario, idx) => {
       const levelNum = Math.min(20, Math.floor(idx / 4) + 1);
-      if (levelNum === 1 && levels[1].length < 5) {
-        levels[1].push(scenario);
-      } else if (levels[levelNum].length < 5) {
-        levels[levelNum].push(scenario);
-      } else {
-        for (let i = levelNum + 1; i <= 20; i++) {
-          if (levels[i].length < 5) {
+      let placed = false;
+      for (let i = levelNum; i <= 20 && !placed; i++) {
+        if (levels[i].length < 5) {
+          levels[i].push(scenario);
+          placed = true;
+        }
+      }
+      if (!placed) {
+        for (let i = 1; i <= 20 && !placed; i++) {
+          if (levels[i].length < 8) {
             levels[i].push(scenario);
-            break;
+            placed = true;
           }
         }
       }
     });
 
-    // Balance types per level
-    Object.keys(levels).forEach((key) => {
-      const level = levels[key];
-      const types = new Set(level.map(s => s.type));
-      const missingTypes = new Set(['sms', 'dialogue', 'image']).difference(types);
-      missingTypes.forEach((mt) => {
-        const toAdd = nonImageScenarios.find(s => s.type === mt);
-        if (toAdd) {
-          level.push(toAdd);
-          nonImageScenarios = nonImageScenarios.filter(s => s !== toAdd);
-        }
-      });
-    });
-
-    // Randomization within levels
-    Object.keys(levels).forEach((key) => {
-      levels[key].sort(() => Math.random() - 0.5);
-    });
-
-    // Debug: Log scenarios per level
-    Object.keys(levels).forEach((key) => {
-      console.log(
-        `Level ${key}: ${levels[key].length} scenarios, Types: ${levels[key]
-          .map((s) => s.type)
-          .join(", ")}`
-      );
-    });
-
-    // Cache in localStorage
-    localStorage.setItem('levelsData', JSON.stringify(levels));
-
-    window.levelsData = levels;
-  } catch (error) {
-    console.error("Error generating levels:", error);
-    showToast(`فشل تحميل الأسئلة: ${error.message}`, "error");
-    // Fallback to cached data
-    const cached = localStorage.getItem('levelsData');
-    if (cached) {
-      window.levelsData = JSON.parse(cached);
-    } else {
-      // Fallback default question
-      window.levelsData = {
-        1: [{
+    for (let i = 1; i <= 20; i++) {
+      if (levels[i].length === 0) {
+        levels[i].push({
           type: "sms",
-          content: "مرحباً! لقد ربحت جائزة، انقر هنا للمطالبة بها: https://fake.com",
+          content: "رسالة افتراضية: تحقق من رابط غريب قبل النقر.",
           sender: "جهة مجهولة",
           timestamp: "الآن",
           correctAnswer: "phishing",
           difficulty: 1,
-          explanation: "الرسائل التي تحتوي على روابط مشبوهة غالباً ما تكون محاولات احتيال."
-        }]
-      };
+          explanation: "مثال افتراضي.",
+        });
+      }
+      levels[i].sort(() => Math.random() - 0.5);
     }
+
+    try {
+      localStorage.setItem("levelsData", JSON.stringify(levels));
+    } catch (e) {
+      console.warn("Unable to cache levelsData:", e);
+    }
+
+    window.levelsData = levels;
+    console.log("Levels generated and cached.");
+  } catch (err) {
+    console.error("Error generating levels:", err);
+    showToast(`فشل تحميل الأسئلة: ${err.message}`, "error");
+
+    const cached = localStorage.getItem("levelsData");
+    if (cached) {
+      try {
+        window.levelsData = JSON.parse(cached);
+        console.log("Loaded levelsData from cache.");
+        return;
+      } catch (e) {
+        console.warn("Failed to parse cached levelsData:", e);
+      }
+    }
+
+    window.levelsData = {
+      1: [
+        {
+          type: "sms",
+          content:
+            "مرحباً! لقد ربحت جائزة، انقر هنا للمطالبة بها: https://fake.com",
+          sender: "جهة مجهولة",
+          timestamp: "الآن",
+          correctAnswer: "phishing",
+          difficulty: 1,
+          explanation:
+            "الرسائل التي تحتوي على روابط مشبوهة غالباً ما تكون محاولات احتيال.",
+        },
+      ],
+    };
   }
 }
 
+/* ===========================
+   Training Level Interface
+   =========================== */
 class TrainingLevelInterface {
   constructor() {
     this.currentQuestion = 0;
     this.totalQuestions = 10;
     this.correctAnswers = 0;
     this.currentPoints = 250;
-    this.currentStreak = 5;
+    this.currentStreak = 0;
     this.levelMultiplier = 1;
     this.passThreshold = 0.7;
     this.questions = [];
-    this.currentLevel = parseInt(new URLSearchParams(window.location.search).get("level")) || 1;
+    this.currentLevel =
+      parseInt(new URLSearchParams(window.location.search).get("level")) || 1;
 
     this.init();
   }
 
   async init() {
-    await generateLevels(); // Generate levels first
+    await generateLevels();
     await this.fetchQuestions();
+    this.bindEvents();
     await this.updateLevelInfo();
     await this.loadUserStats();
-    this.bindEvents();
     this.loadQuestion();
     this.updateProgress();
   }
@@ -215,19 +261,23 @@ class TrainingLevelInterface {
       } else {
         throw new Error(`No data for level ${this.currentLevel}`);
       }
-    } catch (error) {
-      console.error("Error fetching questions:", error);
-      this.showToast("فشل في تحميل الأسئلة، حاول مرة أخرى", "error");
-      this.questions = [{
-        type: "sms",
-        content: "مرحباً! لقد ربحت جائزة، انقر هنا للمطالبة بها: https://fake.com",
-        sender: "جهة مجهولة",
-        timestamp: "الآن",
-        correctAnswer: "phishing",
-        difficulty: 1,
-        explanation: "الرسائل التي تحتوي على روابط مشبوهة غالباً ما تكون محاولات احتيال."
-      }];
-      this.totalQuestions = 1;
+    } catch (err) {
+      console.error("fetchQuestions error:", err);
+      showToast("فشل في تحميل الأسئلة، سيتم استخدام سؤال افتراضي.", "error");
+      this.questions = [
+        {
+          type: "sms",
+          content:
+            "مرحباً! لقد ربحت جائزة، انقر هنا للمطالبة بها: https://fake.com",
+          sender: "جهة مجهولة",
+          timestamp: "الآن",
+          correctAnswer: "phishing",
+          difficulty: 1,
+          explanation:
+            "الرسائل التي تحتوي على روابط مشبوهة غالباً ما تكون محاولات احتيال.",
+        },
+      ];
+      this.totalQuestions = this.questions.length;
     }
   }
 
@@ -236,23 +286,40 @@ class TrainingLevelInterface {
       1: { title: "الأساسيات", description: "أساسيات اكتشاف الاحتيال" },
       2: { title: "رسائل SMS", description: "اكتشاف الرسائل النصية المزيفة" },
       3: { title: "المحادثات", description: "تحديد المحادثات المشبوهة" },
-      // Add more as needed
+      4: {
+        title: "الصور المشبوهة",
+        description: "تحليل الصور المحتملة الاحتيال",
+      },
     };
-    const levelInfo = levelMetadata[this.currentLevel] || { title: `المستوى ${this.currentLevel}`, description: "وصف المستوى" };
-    document.getElementById("levelNumber").textContent = this.currentLevel;
-    document.getElementById("levelTitle").textContent = levelInfo.title;
-    document.getElementById("levelDescription").textContent = levelInfo.description;
+    const levelInfo = levelMetadata[this.currentLevel] || {
+      title: `المستوى ${this.currentLevel}`,
+      description: "وصف المستوى",
+    };
+
+    const levelNumberEl = document.getElementById("levelNumber");
+    const levelTitleEl = document.getElementById("levelTitle");
+    const levelDescriptionEl = document.getElementById("levelDescription");
+    if (levelNumberEl) levelNumberEl.textContent = this.currentLevel;
+    if (levelTitleEl) levelTitleEl.textContent = levelInfo.title;
+    if (levelDescriptionEl)
+      levelDescriptionEl.textContent = levelInfo.description;
   }
 
   async loadUserStats() {
     if (!auth.currentUser) return;
-    const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
-    if (userDoc.exists()) {
-      const userData = userDoc.data();
-      this.currentPoints = userData.points || 250;
-      this.currentStreak = userData.streak || 5;
-      document.getElementById("userPoints").textContent = this.currentPoints;
-      document.getElementById("userStreak").textContent = this.currentStreak;
+    try {
+      const userDoc = await getDoc(doc(db, "users", auth.currentUser.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        this.currentPoints = userData.stats?.totalPoints ?? 250;
+        this.currentStreak = userData.stats?.streak ?? 0;
+        const pointsEl = document.getElementById("userPoints");
+        const streakEl = document.getElementById("userStreak");
+        if (pointsEl) pointsEl.textContent = this.currentPoints;
+        if (streakEl) streakEl.textContent = this.currentStreak;
+      }
+    } catch (err) {
+      console.error("loadUserStats error:", err);
     }
   }
 
@@ -264,105 +331,135 @@ class TrainingLevelInterface {
       });
     });
 
-    document.getElementById("submitDialogue").addEventListener("click", () => {
-      this.handleDialogueAnswer();
-    });
+    const submitDialogueBtn = document.getElementById("submitDialogue");
+    submitDialogueBtn?.addEventListener("click", () =>
+      this.handleDialogueAnswer()
+    );
 
-    document.getElementById("continueBtn").addEventListener("click", () => {
+    const continueBtn = document.getElementById("continueBtn");
+    continueBtn?.addEventListener("click", () => {
       this.closeFeedbackModal();
       this.nextQuestion();
     });
 
-    document.getElementById("nextLevelBtn").addEventListener("click", () => {
-      window.location.href = `training-page.html?level=${this.currentLevel + 1}`;
+    const nextLevelBtn = document.getElementById("nextLevelBtn");
+    nextLevelBtn?.addEventListener("click", () => {
+      if ((nextLevelBtn.textContent || "").includes("إعادة")) {
+        window.location.reload();
+      } else {
+        window.location.href = `training-page.html?level=${
+          this.currentLevel + 1
+        }`;
+      }
     });
 
-    document.getElementById("backToDashboard").addEventListener("click", () => {
+    const backBtn = document.getElementById("backToDashboard");
+    backBtn?.addEventListener("click", () => {
       window.location.href = "dashboard.html";
     });
 
     document.addEventListener("click", (e) => {
-      if (e.target.classList.contains("fixed") && e.target.classList.contains("inset-0")) {
-        const modal = e.target;
+      const target = e.target;
+      if (!target) return;
+      if (
+        target.classList &&
+        target.classList.contains("fixed") &&
+        target.classList.contains("inset-0")
+      ) {
+        const modal = target;
         modal.classList.add("opacity-0", "pointer-events-none");
-        modal.querySelector(".bg-white").classList.add("scale-95");
-        modal.querySelector(".bg-white").classList.remove("scale-100");
+        const content = modal.querySelector(".bg-white, .bg-white\\/10");
+        if (content) {
+          content.classList.add("scale-95");
+          content.classList.remove("scale-100");
+        }
       }
     });
   }
 
   loadQuestion() {
-    document.getElementById("smsQuestion").classList.add("hidden");
-    document.getElementById("dialogueQuestion").classList.add("hidden");
-    document.getElementById("imageQuestion").classList.add("hidden");
+    const smsPane = document.getElementById("smsQuestion");
+    const dialoguePane = document.getElementById("dialogueQuestion");
+    const imagePane = document.getElementById("imageQuestion");
+    smsPane?.classList.add("hidden");
+    dialoguePane?.classList.add("hidden");
+    imagePane?.classList.add("hidden");
 
     if (this.currentQuestion >= this.questions.length) {
       this.completeLevel();
       return;
     }
 
-    const question = this.questions[this.currentQuestion];
-    this.updateDifficultyIndicator(question.difficulty);
+    const q = this.questions[this.currentQuestion];
+    this.updateDifficultyIndicator(q.difficulty);
 
-    switch (question.type) {
-      case "sms":
-        this.loadSMSQuestion(question);
-        break;
-      case "dialogue":
-        this.loadDialogueQuestion(question);
-        break;
-      case "image":
-        this.loadImageQuestion(question);
-        break;
+    if (q.type === "sms" && smsPane) {
+      smsPane.classList.remove("hidden");
+      const contentEl = document.getElementById("smsContent");
+      const senderEl = document.getElementById("smsSender");
+      const tsEl = document.getElementById("smsTimestamp");
+      if (contentEl) contentEl.textContent = q.content || "";
+      if (senderEl) senderEl.textContent = q.sender || "جهة مجهولة";
+      if (tsEl) tsEl.textContent = q.timestamp || "الآن";
+    } else if (q.type === "dialogue" && dialoguePane) {
+      dialoguePane.classList.remove("hidden");
+      const messagesContainer = document.getElementById("dialogueMessages");
+      if (messagesContainer) {
+        messagesContainer.innerHTML = "";
+        q.messages.forEach((message, index) => {
+          const wrapper = document.createElement("div");
+          wrapper.className = `flex items-start gap-3 ${
+            message.sender === "user" ? "justify-end" : ""
+          }`;
+          wrapper.innerHTML = `
+            <div class="flex items-start gap-3 ${
+              message.sender === "user" ? "flex-row-reverse" : ""
+            }">
+              <div class="w-8 h-8 ${
+                message.sender === "user" ? "bg-blue-500" : "bg-gray-500"
+              } rounded-full flex items-center justify-center">
+                <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path>
+                </svg>
+              </div>
+              <div class="flex-1 max-w-xs">
+                <div class="bg-white/10 rounded-lg p-3 mb-2">
+                  <p class="text-white text-sm">${this.escapeHtml(
+                    message.text
+                  )}</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <input type="checkbox" id="msg_${index}" class="w-4 h-4 text-red-500 bg-white/10 border-white/20 rounded focus:ring-red-400 focus:ring-2" data-is-phishing="${
+            message.isPhishing
+          }">
+                  <label for="msg_${index}" class="text-xs text-white/60">محاولة احتيال</label>
+                </div>
+              </div>
+            </div>
+          `;
+          messagesContainer.appendChild(wrapper);
+        });
+      }
+    } else if (q.type === "image" && imagePane) {
+      imagePane.classList.remove("hidden");
+      const imgEl = document.getElementById("questionImage");
+      const descEl = document.getElementById("imageDescription");
+      if (imgEl && q.imageUrl) imgEl.src = q.imageUrl;
+      if (descEl) descEl.textContent = q.description || "";
     }
   }
 
-  loadSMSQuestion(question) {
-    document.getElementById("smsQuestion").classList.remove("hidden");
-    document.getElementById("smsContent").textContent = question.content;
-    document.getElementById("smsSender").textContent = question.sender || "جهة مجهولة";
-    document.getElementById("smsTimestamp").textContent = question.timestamp || "الآن";
-  }
-
-  loadDialogueQuestion(question) {
-    document.getElementById("dialogueQuestion").classList.remove("hidden");
-    const messagesContainer = document.getElementById("dialogueMessages");
-    messagesContainer.innerHTML = "";
-
-    question.messages.forEach((message, index) => {
-      const messageDiv = document.createElement("div");
-      messageDiv.className = `flex items-start gap-3 ${message.sender === "user" ? "justify-end" : ""}`;
-      messageDiv.innerHTML = `
-        <div class="flex items-start gap-3 ${message.sender === "user" ? "flex-row-reverse" : ""}">
-          <div class="w-8 h-8 ${message.sender === "user" ? "bg-blue-500" : "bg-gray-500"} rounded-full flex items-center justify-center">
-            <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path>
-            </svg>
-          </div>
-          <div class="flex-1 max-w-xs">
-            <div class="bg-white/10 rounded-lg p-3 mb-2">
-              <p class="text-white text-sm">${message.text}</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <input type="checkbox" id="msg_${index}" class="w-4 h-4 text-red-500 bg-white/10 border-white/20 rounded focus:ring-red-400 focus:ring-2" data-is-phishing="${message.isPhishing}">
-              <label for="msg_${index}" class="text-xs text-white/60">محاولة احتيال</label>
-            </div>
-          </div>
-        </div>
-      `;
-      messagesContainer.appendChild(messageDiv);
-    });
-  }
-
-  loadImageQuestion(question) {
-    document.getElementById("imageQuestion").classList.remove("hidden");
-    document.getElementById("questionImage").src = question.imageUrl;
-    document.getElementById("imageDescription").textContent = question.description;
+  escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
   }
 
   async handleAnswer(answer) {
-    const question = this.questions[this.currentQuestion];
-    const isCorrect = answer === question.correctAnswer;
+    const q = this.questions[this.currentQuestion];
+    const isCorrect = !!q && answer === q.correctAnswer;
 
     if (isCorrect) {
       this.correctAnswers++;
@@ -373,24 +470,24 @@ class TrainingLevelInterface {
     }
 
     await this.updateUserStats();
-    this.showFeedback(isCorrect, question.explanation);
+    this.showFeedback(isCorrect, q?.explanation ?? "");
   }
 
   async handleDialogueAnswer() {
-    const question = this.questions[this.currentQuestion];
-    const checkboxes = document.querySelectorAll("#dialogueMessages input[type='checkbox']");
+    const q = this.questions[this.currentQuestion];
+    if (!q) return;
+    const checkboxes = document.querySelectorAll(
+      "#dialogueMessages input[type='checkbox']"
+    );
     let correctSelections = 0;
-
-    question.messages.forEach((message, index) => {
-      const isPhishing = message.isPhishing;
-      const isChecked = checkboxes[index].checked;
-      if ((isPhishing && isChecked) || (!isPhishing && !isChecked)) {
+    q.messages.forEach((message, index) => {
+      const isPhishing = !!message.isPhishing;
+      const isChecked = !!(checkboxes[index] && checkboxes[index].checked);
+      if ((isPhishing && isChecked) || (!isPhishing && !isChecked))
         correctSelections++;
-      }
     });
 
-    const isCorrect = correctSelections === question.messages.length;
-
+    const isCorrect = correctSelections === q.messages.length;
     if (isCorrect) {
       this.correctAnswers++;
       this.currentPoints += 50 * this.levelMultiplier;
@@ -400,59 +497,78 @@ class TrainingLevelInterface {
     }
 
     await this.updateUserStats();
-    this.showFeedback(isCorrect, question.explanation);
+    this.showFeedback(isCorrect, q.explanation ?? "");
   }
 
   showFeedback(isCorrect, explanation) {
     const modal = document.getElementById("feedbackModal");
+    if (!modal) return;
     const icon = document.getElementById("feedbackIcon");
     const title = document.getElementById("feedbackTitle");
     const message = document.getElementById("feedbackMessage");
-    const explanationEl = document.getElementById("feedbackExplanation").querySelector("p");
+    const explanationEl = document
+      .getElementById("feedbackExplanation")
+      ?.querySelector("p");
     const pointsEarned = document.getElementById("pointsEarned");
     const currentScore = document.getElementById("currentScore");
 
-    if (isCorrect) {
-      icon.className = "w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4";
-      icon.innerHTML = `
-        <svg class="w-8 h-8 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
-        </svg>
-      `;
-      title.textContent = "عظيم!";
-      message.textContent = "إجابة صحيحة! لقد تعرفت بنجاح على محاولة الاحتيال.";
-      pointsEarned.textContent = `+${50 * this.levelMultiplier}`;
-    } else {
-      icon.className = "w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4";
-      icon.innerHTML = `
-        <svg class="w-8 h-8 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-        </svg>
-      `;
-      title.textContent = "خطأ!";
-      message.textContent = "إجابة خاطئة. لا تقلق، التعلم من الأخطاء جزء من العملية.";
-      pointsEarned.textContent = "+0";
+    if (icon) {
+      if (isCorrect) {
+        icon.className =
+          "w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4";
+        icon.innerHTML = `
+          <svg class="w-8 h-8 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+          </svg>
+        `;
+      } else {
+        icon.className =
+          "w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4";
+        icon.innerHTML = `
+          <svg class="w-8 h-8 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
+          </svg>
+        `;
+      }
     }
 
-    explanationEl.textContent = explanation;
-    currentScore.textContent = `${this.correctAnswers}/${this.currentQuestion + 1}`;
+    if (title) title.textContent = isCorrect ? "عظيم!" : "خطأ!";
+    if (message)
+      message.textContent = isCorrect
+        ? "إجابة صحيحة! لقد تعرفت بنجاح على محاولة الاحتيال."
+        : "إجابة خاطئة. التعلم من الأخطاء جزء من العملية.";
+    if (explanationEl) explanationEl.textContent = explanation || "";
+    if (pointsEarned)
+      pointsEarned.textContent = isCorrect
+        ? `+${50 * this.levelMultiplier}`
+        : "+0";
+    if (currentScore)
+      currentScore.textContent = `${this.correctAnswers}/${
+        this.currentQuestion + 1
+      }`;
 
     modal.classList.remove("opacity-0", "pointer-events-none");
-    modal.querySelector(".bg-white").classList.remove("scale-95");
-    modal.querySelector(".bg-white").classList.add("scale-100");
+    const content = modal.querySelector(".bg-white, .bg-white\\/10");
+    if (content) {
+      content.classList.remove("scale-95");
+      content.classList.add("scale-100");
+    }
   }
 
   closeFeedbackModal() {
     const modal = document.getElementById("feedbackModal");
+    if (!modal) return;
     modal.classList.add("opacity-0", "pointer-events-none");
-    modal.querySelector(".bg-white").classList.add("scale-95");
-    modal.querySelector(".bg-white").classList.remove("scale-100");
+    const content = modal.querySelector(".bg-white, .bg-white\\/10");
+    if (content) {
+      content.classList.add("scale-95");
+      content.classList.remove("scale-100");
+    }
   }
 
   nextQuestion() {
     this.currentQuestion++;
     this.updateProgress();
-
     if (this.currentQuestion >= this.totalQuestions) {
       this.completeLevel();
     } else {
@@ -462,21 +578,28 @@ class TrainingLevelInterface {
 
   async updateUserStats() {
     if (!auth.currentUser) return;
-    await updateDoc(doc(db, "users", auth.currentUser.uid), {
-      points: this.currentPoints,
-      streak: this.currentStreak,
-    });
-    document.getElementById("userPoints").textContent = this.currentPoints;
-    document.getElementById("userStreak").textContent = this.currentStreak;
+    try {
+      await updateDoc(doc(db, "users", auth.currentUser.uid), {
+        "stats.totalPoints": this.currentPoints,
+        "stats.streak": this.currentStreak,
+      });
+      const pointsEl = document.getElementById("userPoints");
+      const streakEl = document.getElementById("userStreak");
+      if (pointsEl) pointsEl.textContent = this.currentPoints;
+      if (streakEl) streakEl.textContent = this.currentStreak;
+    } catch (err) {
+      console.error("updateUserStats error:", err);
+    }
   }
 
   updateProgress() {
     const progressBar = document.getElementById("progressBar");
     const progressText = document.getElementById("progressText");
-    const progress = (this.currentQuestion / this.totalQuestions) * 100;
-
-    progressBar.style.width = `${progress}%`;
-    progressText.textContent = `${this.currentQuestion} من ${this.totalQuestions}`;
+    const progress =
+      (this.currentQuestion / Math.max(1, this.totalQuestions)) * 100;
+    if (progressBar) progressBar.style.width = `${progress}%`;
+    if (progressText)
+      progressText.textContent = `${this.currentQuestion} من ${this.totalQuestions}`;
   }
 
   updateDifficultyIndicator(difficulty) {
@@ -491,12 +614,15 @@ class TrainingLevelInterface {
         star.classList.add("text-white/30");
       }
     });
-    const difficultyLabel = document.querySelector("#difficultyStars").parentElement.querySelector(".text-blue-200");
-    difficultyLabel.textContent = labels[difficulty - 1] || "متوسط";
+    const difficultyLabel = document
+      .querySelector("#difficultyStars")
+      ?.parentElement?.querySelector(".text-blue-200");
+    if (difficultyLabel)
+      difficultyLabel.textContent = labels[difficulty - 1] || "متوسط";
   }
 
   async completeLevel() {
-    const successRate = this.correctAnswers / this.totalQuestions;
+    const successRate = this.correctAnswers / Math.max(1, this.totalQuestions);
     const passed = successRate >= this.passThreshold;
 
     const modal = document.getElementById("levelCompleteModal");
@@ -504,33 +630,42 @@ class TrainingLevelInterface {
     const totalPointsEarned = document.getElementById("totalPointsEarned");
     const nextLevelBtn = document.getElementById("nextLevelBtn");
 
-    finalScore.textContent = `${this.correctAnswers}/${this.totalQuestions}`;
-    totalPointsEarned.textContent = this.currentPoints - 250;
+    if (finalScore)
+      finalScore.textContent = `${this.correctAnswers}/${this.totalQuestions}`;
+    if (totalPointsEarned)
+      totalPointsEarned.textContent = `${this.currentPoints - 250}`;
 
     if (passed && auth.currentUser) {
-      await updateDoc(doc(db, "users", auth.currentUser.uid), {
-        completedLevels: arrayUnion(this.currentLevel),
-        currentLevel: this.currentLevel + 1,
-        points: increment(this.currentPoints - 250),
-      });
-    } else {
-      nextLevelBtn.textContent = "إعادة المحاولة";
-      nextLevelBtn.onclick = () => {
-        window.location.reload();
-      };
+      try {
+        await updateDoc(doc(db, "users", auth.currentUser.uid), {
+          completedLevels: arrayUnion(this.currentLevel),
+          currentLevel: this.currentLevel + 1,
+          "stats.totalPoints": this.currentPoints,
+        });
+        showToast(`مبروك! أكملت المستوى ${this.currentLevel}.`, "success");
+      } catch (err) {
+        console.error("completeLevel updateDoc error:", err);
+        showToast("فشل حفظ نتيجة المستوى.", "error");
+      }
+    } else if (!passed) {
+      if (nextLevelBtn) nextLevelBtn.textContent = "إعادة المحاولة";
+      showToast("لم تستوفِ الحد المطلوب، حاول مرة أخرى.", "warning");
     }
 
-    modal.classList.remove("opacity-0", "pointer-events-none");
-    modal.querySelector(".bg-white").classList.remove("scale-95");
-    modal.querySelector(".bg-white").classList.add("scale-100");
-  }
-
-  showToast(message, type = "info") {
-    const event = new CustomEvent("showToast", { detail: { message, type } });
-    document.dispatchEvent(event);
+    if (modal) {
+      modal.classList.remove("opacity-0", "pointer-events-none");
+      const content = modal.querySelector(".bg-white, .bg-white\\/10");
+      if (content) {
+        content.classList.remove("scale-95");
+        content.classList.add("scale-100");
+      }
+    }
   }
 }
 
+/* ===========================
+   Start the interface
+   =========================== */
 document.addEventListener("DOMContentLoaded", () => {
   new TrainingLevelInterface();
 });
