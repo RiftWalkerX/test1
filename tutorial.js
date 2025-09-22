@@ -188,3 +188,6 @@ function showToast(message, type = "info") {
 
 // Initialize tutorial event listeners when DOM is loaded
 document.addEventListener("DOMContentLoaded", initializeTutorial);
+
+
+export { endTutorial}

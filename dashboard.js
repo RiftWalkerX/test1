@@ -5,6 +5,7 @@ import { loadRoomInvites, setupRoomInviteListener } from "./room-invites.js";
 import { checkDailyStreak } from "./streak.js";
 import { loadProfileData } from "./profile.js";
 import { updateLevelsStatus, handleLevelClick } from "./training.js";
+import { startTutorial, endTutorial } from "./tutorial.js";
 
 // Update profile images & display name using auth.currentUser (falls back to img.svg)
 function updateProfileImages() {
@@ -27,7 +28,6 @@ function updateProfileImages() {
   if (displayNameEl) displayNameEl.textContent = displayName;
 }
 
-import { startTutorial } from "./tutorial.js";
 // Dashboard initialization and event listeners
 document.addEventListener("DOMContentLoaded", async function () {
   // If already signed in, load profile & update images immediately
@@ -150,29 +150,6 @@ function setupTrainingGuideModal() {
   const trainingGuideModal = document.getElementById("trainingGuideModal");
   const closeBtn = document.getElementById("closeTrainingGuideBtn");
   const startTutorialBtn = document.getElementById("startTutorialBtn");
-  const skipTutorialBtn = document.getElementById("skipTutorialBtn");
-  const prevBtn = document.getElementById("prevTutorialBtn");
-  const nextBtn = document.getElementById("nextTutorialBtn");
-
-  let currentPage = 0;
-  const totalPages = 8;
-
-  // tutorialContent omitted here for brevity (keep your existing content)
-  // I'll reuse the tutorialContent from your previous file when copying to the project.
-
-  function updateTutorialContent() {
-    const contentContainer = document.getElementById("tutorialContent");
-    const progressText = document.getElementById("tutorialProgress");
-
-    contentContainer.innerHTML = tutorialContent[currentPage].content;
-    progressText.textContent = `الصفحة ${currentPage + 1} من ${totalPages}`;
-
-    prevBtn.disabled = currentPage === 0;
-    nextBtn.disabled = currentPage === totalPages - 1;
-
-    if (currentPage === totalPages - 1) nextBtn.textContent = "إنهاء";
-    else nextBtn.textContent = "التالي";
-  }
 
   trainingGuideBtn?.addEventListener("click", () => {
     showModal(trainingGuideModal);
@@ -182,31 +159,7 @@ function setupTrainingGuideModal() {
     hideModal(trainingGuideModal);
   });
 
-  startTutorialBtn?.addEventListener("click", () => {
-    currentPage = 0;
-    updateTutorialContent();
-  });
-
-  skipTutorialBtn?.addEventListener("click", () => {
-    hideModal(trainingGuideModal);
-  });
-
-  prevBtn?.addEventListener("click", () => {
-    if (currentPage > 0) {
-      currentPage--;
-      updateTutorialContent();
-    }
-  });
-
-  nextBtn?.addEventListener("click", () => {
-    if (currentPage < totalPages - 1) {
-      currentPage++;
-      updateTutorialContent();
-    } else {
-      hideModal(trainingGuideModal);
-      window.location.href = "tutorial.html";
-    }
-  });
+  startTutorialBtn?.addEventListener("click", startTutorial);
 }
 
 function setupJoinRoomModal() {
