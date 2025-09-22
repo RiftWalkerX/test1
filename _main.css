@@ -2911,3 +2911,25 @@ pre {
         gap: 0.5rem;
     }
 }
+/* Button loading states */
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+button:disabled:hover {
+  transform: none !important;
+}
+
+/* Room invitation styles */
+.room-invitation {
+  border-left: 4px solid rgb(168 85 247);
+}
+
+.accept-room-invite, .deny-room-invite {
+  transition: all 0.2s ease;
+}
+
+.accept-room-invite:hover, .deny-room-invite:hover {
+  transform: translateY(-1px);
+}

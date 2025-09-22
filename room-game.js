@@ -818,7 +818,7 @@ class RoomGame {
 document.addEventListener("DOMContentLoaded", () => {
   // Check if user is authenticated
   if (!auth.currentUser) {
-    window.location.href = "login.html";
+    window.location.href = "newlogin.html";
     return;
   }
 

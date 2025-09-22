@@ -1189,63 +1189,42 @@
       </div>
     </div>
 
-    <!-- Join Room Modal -->
-    <div
-      id="joinRoomModal"
-      class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 opacity-0 pointer-events-none transition-all duration-300 z-50"
-    >
-      <div
-        class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 max-w-md w-full border border-white/20 transform scale-95 transition-transform duration-300"
-      >
-        <div class="text-center">
-          <div
-            class="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center"
-          >
-            <svg
-              class="w-8 h-8 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
-          </div>
-          <h3 class="text-xl font-bold text-white mb-2">انضم إلى غرفة</h3>
-          <p class="text-blue-200 mb-6">
-            أدخل رمز الغرفة للانضمام إلى جلسة التدريب
-          </p>
+<!-- Join Room Modal -->
+<div id="joinRoomModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 opacity-0 pointer-events-none transition-all duration-300 z-50">
+  <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 max-w-md w-full border border-white/20 transform scale-95 transition-transform duration-300">
+    <div class="text-center mb-6">
+      <div class="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-full flex items-center justify-center">
+        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+        </svg>
+      </div>
+      <h3 class="text-xl font-bold text-white mb-2">انضم إلى غرفة</h3>
+      <p class="text-blue-200">أدخل رمز الغرفة للانضمام</p>
+    </div>
 
-          <div class="mb-4">
-            <input
-              type="text"
-              id="roomCodeInput"
-              placeholder="رمز الغرفة (Room ID)"
-              class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-
-          <div class="flex gap-3">
-            <button
-              id="joinRoomBtn"
-              class="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200"
-            >
-              انضم الآن
-            </button>
-            <button
-              id="closeJoinRoomModalBtn"
-              class="flex-1 bg-white/10 hover:bg-white/20 text-white py-3 px-6 rounded-lg font-medium transition-all duration-200"
-            >
-              إلغاء
-            </button>
-          </div>
-        </div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-white text-sm font-medium mb-2 text-right">رمز الغرفة</label>
+        <input 
+          type="text" 
+          id="joinRoomIdInput" 
+          placeholder="أدخل رمز الغرفة هنا" 
+          class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-right font-mono"
+          maxlength="20"
+        >
       </div>
     </div>
+
+    <div class="flex gap-3 mt-6">
+      <button id="joinRoomConfirmBtn" class="flex-1 bg-gradient-to-r from-blue-500 to-cyan-600 text-white py-3 px-6 rounded-lg font-medium hover:from-blue-600 hover:to-cyan-700 transition-all duration-200">
+        انضم الآن
+      </button>
+      <button id="closeJoinRoomBtn" class="flex-1 bg-white/10 hover:bg-white/20 text-white py-3 px-6 rounded-lg font-medium transition-all duration-200">
+        إلغاء
+      </button>
+    </div>
+  </div>
+</div>
 
     <!-- Training Guide Modal -->
     <div
