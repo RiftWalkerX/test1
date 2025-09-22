@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>لوحة التحكم الرئيسية - منصة Zero Fake للتدريب</title>
+
+    <!-- small inline SVG favicon to avoid 404 -->
+    <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="14" font-size="14">ZF</text></svg>'>
+
     <link rel="stylesheet" href="_main.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -78,6 +82,7 @@
           <div class="flex items-center gap-4">
             <!-- User Profile -->
             <div class="flex items-center gap-3 bg-white/10 rounded-lg p-2">
+              <!-- kept this id as userProfileImage for scripts that might target it -->
               <img
                 id="userProfileImage"
                 alt="صورة المستخدم"
@@ -231,8 +236,9 @@
           >
             <div class="text-center mb-6">
               <div class="w-20 h-20 mx-auto mb-4 relative">
+                <!-- renamed this id so it won't clash with header id -->
                 <img
-                  id="userProfileImage"
+                  id="userProfileImageCard"
                   alt="صورة المستخدم"
                   class="w-full h-full rounded-full object-cover border-4 border-blue-400"
                   src="img.svg"
@@ -575,7 +581,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -594,7 +600,7 @@
                   </div>
                 </div>
 
-                <!-- Additional levels (5-20) -->
+                <!-- Additional levels (5-20) - all use the corrected locked icon path -->
                 <div
                   class="level-node locked flex flex-col items-center"
                   data-level="5"
@@ -610,7 +616,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -644,7 +650,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -663,6 +669,7 @@
                   </div>
                 </div>
 
+                <!-- many more levels follow, all using the corrected locked icon: -->
                 <div
                   class="level-node locked flex flex-col items-center"
                   data-level="7"
@@ -678,7 +685,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -697,7 +704,6 @@
                   </div>
                 </div>
 
-                <!-- Continue with more levels... -->
                 <div
                   class="level-node locked flex flex-col items-center"
                   data-level="8"
@@ -713,7 +719,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -732,7 +738,7 @@
                   </div>
                 </div>
 
-                <!-- Add remaining levels 9-20 with similar structure -->
+                <!-- Levels 9 - 20 (same corrected lock icon) -->
                 <div
                   class="level-node locked flex flex-col items-center"
                   data-level="9"
@@ -748,7 +754,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -782,7 +788,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -801,7 +807,7 @@
                   </div>
                 </div>
 
-                <!-- Continue pattern for levels 11-20 -->
+                <!-- Levels 11 - 20 -->
                 <div
                   class="level-node locked flex flex-col items-center"
                   data-level="11"
@@ -817,7 +823,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -851,7 +857,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -870,7 +876,7 @@
                   </div>
                 </div>
 
-                <!-- Continue with remaining levels 13-20 -->
+                <!-- Continue levels 13-20 similarly -->
                 <div
                   class="level-node locked flex flex-col items-center"
                   data-level="13"
@@ -886,7 +892,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -920,7 +926,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -954,7 +960,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -988,7 +994,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -1022,7 +1028,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -1056,7 +1062,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -1090,7 +1096,7 @@
                       >
                         <path
                           fill-rule="evenodd"
-                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 616 0z"
+                          d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 0 1 6 0z"
                           clip-rule="evenodd"
                         />
                       </svg>
@@ -1240,6 +1246,7 @@
         </div>
       </div>
     </div>
+
     <!-- Join Room Modal -->
     <div
       id="joinRoomModal"
@@ -1297,6 +1304,7 @@
         </div>
       </div>
     </div>
+
     <!-- Training Guide Modal -->
     <div
       id="trainingGuideModal"
@@ -1319,7 +1327,7 @@
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 stroke-width="2"
-                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477 4.5 1.253"
+                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
               />
             </svg>
           </div>
@@ -1409,7 +1417,8 @@
         </div>
       </div>
     </div>
-    <!-- Import Firebase Config -->
+
+    <!-- Import Firebase Config & your scripts -->
     <script type="module" src="firebase-init.js"></script>
     <script type="module" src="dashboard.js"></script>
     <script type="module" src="friends.js"></script>
