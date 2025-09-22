@@ -100,9 +100,7 @@ function setupUIEventListeners() {
       hideModal(document.getElementById("joinRoomModal"));
       hideModal(document.getElementById("trainingGuideModal"));
 
-      // Also close tutorial if it's open
-      const tutorialOverlay = document.getElementById("tutorialOverlay");
-      if (tutorialOverlay && !tutorialOverlay.classList.contains("hidden")) {
+      if (isTutorialActive) {
         endTutorial();
       }
 
@@ -159,7 +157,10 @@ function setupTrainingGuideModal() {
     hideModal(trainingGuideModal);
   });
 
-  startTutorialBtn?.addEventListener("click", startTutorial);
+  startTutorialBtn?.addEventListener("click", () => {
+    hideModal(trainingGuideModal);
+    startTutorial(); // This should now work properly
+  });
 }
 
 function setupJoinRoomModal() {
