@@ -78,12 +78,6 @@ async function createRoom() {
     currentQuizType = quizType;
     currentQuestionCount = questionCount;
 
-    // Show loading state
-    const createBtn = document.getElementById("createRoomConfirmBtn");
-    const originalText = createBtn.textContent;
-    createBtn.textContent = "جاري الإنشاء...";
-    createBtn.disabled = true;
-
     // Create room document
     const roomRef = await addDoc(collection(db, "rooms"), {
       hostId: user.uid,
@@ -120,22 +114,15 @@ async function createRoom() {
     });
 
     showToast("تم إنشاء الغرفة بنجاح!", "success");
-    createBtn.textContent = originalText;
-    createBtn.disabled = false;
     hideModal(document.getElementById("roomCreationModal"));
 
-    // Navigate directly to room page
+    // Show lobby modal
     setTimeout(() => {
-      window.location.href = `room.html?roomId=${currentRoomId}`;
-    }, 1000);
+      showLobbyModal(currentRoomId, true); // true indicates user is host
+    }, 500);
   } catch (error) {
     console.error("Error creating room:", error);
     showToast("فشل في إنشاء الغرفة: " + error.message, "error");
-
-    // Reset button state
-    const createBtn = document.getElementById("createRoomConfirmBtn");
-    createBtn.textContent = "إنشاء الغرفة";
-    createBtn.disabled = false;
   }
 }
 
@@ -156,20 +143,12 @@ async function joinRoom() {
       return;
     }
 
-    // Show loading state
-    const joinBtn = document.getElementById("joinRoomConfirmBtn");
-    const originalText = joinBtn.textContent;
-    joinBtn.textContent = "جاري الانضمام...";
-    joinBtn.disabled = true;
-
     // Check if room exists and is waiting for players
     const roomRef = doc(db, "rooms", roomId);
     const roomDoc = await getDoc(roomRef);
 
     if (!roomDoc.exists()) {
       showToast("لم يتم العثور على الغرفة، يرجى التحقق من الرمز", "error");
-      joinBtn.textContent = originalText;
-      joinBtn.disabled = false;
       return;
     }
 
@@ -177,15 +156,11 @@ async function joinRoom() {
 
     if (roomData.status !== "waiting") {
       showToast("لا يمكن الانضمام إلى هذه الغرفة حالياً", "error");
-      joinBtn.textContent = originalText;
-      joinBtn.disabled = false;
       return;
     }
 
     if (roomData.players.length >= roomData.maxPlayers) {
       showToast("الغرفة ممتلئة، لا يمكن الانضمام الآن", "error");
-      joinBtn.textContent = originalText;
-      joinBtn.disabled = false;
       return;
     }
 
@@ -193,11 +168,8 @@ async function joinRoom() {
     const existingPlayer = roomData.players.find((p) => p.uid === user.uid);
     if (existingPlayer) {
       showToast("أنت بالفعل في هذه الغرفة", "info");
-      joinBtn.textContent = originalText;
-      joinBtn.disabled = false;
       hideModal(document.getElementById("joinRoomModal"));
-      // Navigate to room directly
-      window.location.href = `room.html?roomId=${roomId}`;
+      showLobbyModal(roomId, false);
       return;
     }
 
@@ -227,29 +199,73 @@ async function joinRoom() {
     currentQuestionCount = roomData.questionCount;
 
     showToast("تم الانضمام إلى الغرفة بنجاح!", "success");
-    joinBtn.textContent = originalText;
-    joinBtn.disabled = false;
     hideModal(document.getElementById("joinRoomModal"));
 
-    // Navigate directly to room page instead of showing lobby
+    // Show lobby modal
     setTimeout(() => {
-      window.location.href = `room.html?roomId=${roomId}`;
-    }, 1000);
+      showLobbyModal(roomId, false); // false indicates user is not host
+    }, 500);
   } catch (error) {
     console.error("Error joining room:", error);
     showToast("فشل في الانضمام إلى الغرفة: " + error.message, "error");
-
-    // Reset button state
-    const joinBtn = document.getElementById("joinRoomConfirmBtn");
-    joinBtn.textContent = "انضم الآن";
-    joinBtn.disabled = false;
   }
 }
 
-// --- Lobby Modal (kept for reference but not used in direct navigation) ---
+// --- Lobby Modal ---
 function showLobbyModal(roomId, isHost) {
-  // This function is kept but won't be called since we navigate directly to room.html
-  // You can remove it or keep it for future use
+  const lobbyModal = document.getElementById("lobbyModal");
+  const roomCodeElement = document.getElementById("roomCode");
+  const roomNameElement = document.getElementById("lobbyRoomName");
+  const roomInfoElement = document.getElementById("roomInfo");
+  const playerListElement = document.getElementById("lobbyPlayerList");
+  const startGameBtn = document.getElementById("startGameBtn");
+  const inviteFriendsBtn = document.getElementById("inviteFriendsBtn");
+  const shareRoomBtn = document.getElementById("shareRoomBtn");
+  const closeLobbyBtn = document.getElementById("closeLobbyBtn");
+  const readyBtn = document.getElementById("readyBtn");
+
+  if (roomCodeElement) roomCodeElement.textContent = roomId;
+
+  // Show/hide buttons based on host status
+  if (isHost) {
+    startGameBtn?.classList.remove("hidden");
+    readyBtn?.classList.add("hidden");
+    inviteFriendsBtn?.classList.remove("hidden");
+  } else {
+    startGameBtn?.classList.add("hidden");
+    readyBtn?.classList.remove("hidden");
+    inviteFriendsBtn?.classList.add("hidden");
+  }
+
+  // Set up real-time listeners
+  setupRoomListeners(
+    roomId,
+    playerListElement,
+    roomNameElement,
+    roomInfoElement,
+    startGameBtn,
+    readyBtn,
+    isHost
+  );
+
+  // Share room ID button
+  shareRoomBtn?.addEventListener("click", () => shareRoomId(roomId));
+
+  // Invite friends button (host only)
+  inviteFriendsBtn?.addEventListener("click", () =>
+    showInviteFriendsModal(roomId)
+  );
+
+  // Start game button (host only)
+  startGameBtn?.addEventListener("click", () => startGame(roomId));
+
+  // Ready button (players only)
+  readyBtn?.addEventListener("click", () => toggleReadyStatus(roomId));
+
+  // Close lobby
+  closeLobbyBtn?.addEventListener("click", () => closeLobby(roomId, isHost));
+
+  showModal(lobbyModal);
 }
 
 function setupRoomListeners(
@@ -261,7 +277,103 @@ function setupRoomListeners(
   readyBtn,
   isHost
 ) {
-  // This function is kept for reference but won't be used in direct navigation
+  // Listen to room data
+  roomListener = onSnapshot(doc(db, "rooms", roomId), (doc) => {
+    if (doc.exists()) {
+      const roomData = doc.data();
+
+      if (roomNameElement && roomData.roomName) {
+        roomNameElement.textContent = roomData.roomName;
+      }
+
+      if (roomInfoElement) {
+        roomInfoElement.innerHTML = `
+          نوع التحدي: ${getQuizTypeName(roomData.quizType)}<br>
+          عدد الأسئلة: ${roomData.questionCount}<br>
+          اللاعبون: ${roomData.players?.length || 0}/${roomData.maxPlayers}
+        `;
+      }
+
+      // Update start button based on player count and readiness
+      if (startGameBtn && roomData.players) {
+        const readyPlayers = roomData.players.filter((p) => p.isReady);
+        const canStart =
+          readyPlayers.length >= 2 &&
+          readyPlayers.length === roomData.players.length;
+
+        startGameBtn.disabled = !canStart;
+        startGameBtn.textContent = canStart
+          ? "بدء اللعبة"
+          : `بانتظار اللاعبين (${readyPlayers.length}/${roomData.players.length})`;
+      }
+
+      // Update ready button for players
+      if (readyBtn && !isHost) {
+        const user = auth.currentUser;
+        const player = roomData.players?.find((p) => p.uid === user?.uid);
+        if (player) {
+          readyBtn.textContent = player.isReady
+            ? "إلغاء الاستعداد"
+            : "أنا مستعد";
+          readyBtn.className = player.isReady
+            ? "ready-btn bg-gradient-to-r from-yellow-500 to-orange-600 text-white py-3 px-6 rounded-lg font-medium hover:from-yellow-600 hover:to-orange-700 transition-all duration-200"
+            : "ready-btn bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200";
+        }
+      }
+
+      // Update room status
+      if (roomData.status === "started") {
+        navigateToQuizPage(roomData.quizType, roomId, roomData.questionCount);
+      } else if (roomData.status === "ended") {
+        showResultsModal(roomId);
+      }
+    }
+  });
+
+  // Listen to players collection
+  playersListener = onSnapshot(
+    collection(db, `rooms/${roomId}/players`),
+    (snapshot) => {
+      if (playerListElement) {
+        playerListElement.innerHTML = "";
+
+        snapshot.docs.forEach((playerDoc, index) => {
+          const player = playerDoc.data();
+          const playerElement = document.createElement("div");
+          playerElement.className = `player-item ${
+            index === 0 ? "joining" : ""
+          }`;
+          playerElement.innerHTML = `
+          <div class="player-info">
+            <div class="player-avatar">${
+              player.displayName?.charAt(0) || "?"
+            }</div>
+            <div>
+              <p class="text-white font-medium">${player.displayName}</p>
+              <div class="player-status">
+                <span class="status-dot ${
+                  player.isReady ? "ready" : "waiting"
+                }"></span>
+                <span class="text-blue-200 text-xs">${
+                  player.isReady ? "مستعد" : "في انتظار"
+                }</span>
+                ${
+                  player.isHost
+                    ? '<span class="text-yellow-400 text-xs">👑</span>'
+                    : ""
+                }
+              </div>
+            </div>
+          </div>
+          <div class="text-blue-200 text-sm">
+            ${player.score || 0} نقطة
+          </div>
+        `;
+          playerListElement.appendChild(playerElement);
+        });
+      }
+    }
+  );
 }
 
 // Toggle ready status for players
