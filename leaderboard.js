@@ -28,7 +28,7 @@ function getSafeValue(obj, path, fallback = 0) {
 
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
-    window.location.href = "./newlogin.html";
+    window.location.href = "./newnewlogin.html";
     return;
   }
 
