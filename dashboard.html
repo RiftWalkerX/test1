@@ -6,7 +6,10 @@
     <title>لوحة التحكم الرئيسية - منصة Zero Fake للتدريب</title>
 
     <!-- small inline SVG favicon to avoid 404 -->
-    <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="14" font-size="14">ZF</text></svg>'>
+    <link
+      rel="icon"
+      href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="14" font-size="14">ZF</text></svg>'
+    />
 
     <link rel="stylesheet" href="_main.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -80,8 +83,32 @@
 
           <!-- User Profile & Navigation -->
           <div class="flex items-center gap-4">
+            <!-- Leaderboard Icon -->
+            <a
+              href="./leaderboard.html"
+              class="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200 min-touch-target flex items-center justify-center"
+              title="لوحة المتصدرين"
+            >
+              <svg
+                class="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                />
+              </svg>
+            </a>
+
             <!-- User Profile -->
-            <div class="flex items-center gap-3 bg-white/10 rounded-lg p-2">
+            <a
+              href="./user_profile.html"
+              class="flex items-center gap-3 bg-white/10 rounded-lg p-2 hover:bg-white/20 transition-all duration-200"
+            >
               <!-- kept this id as userProfileImage for scripts that might target it -->
               <img
                 id="userProfileImage"
@@ -90,107 +117,11 @@
                 src="img.svg"
               />
               <div class="text-right">
-                <p
-                  id="userDisplayName"
-                  class="text-sm font-medium text-white"
-                ></p>
+                <p id="userDisplayName" class="text-sm font-medium text-white">
+                  اسم المستخدم
+                </p>
               </div>
-            </div>
-
-            <!-- Settings Menu -->
-            <div class="relative">
-              <button
-                id="settingsBtn"
-                class="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all duration-200 min-touch-target"
-              >
-                <svg
-                  class="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </button>
-
-              <!-- Settings Dropdown -->
-              <div
-                id="settingsMenu"
-                class="absolute left-0 mt-2 w-48 bg-white/10 backdrop-blur-lg rounded-lg shadow-lg border border-white/20 opacity-0 pointer-events-none transition-all duration-200 z-50"
-              >
-                <div class="p-2">
-                  <a
-                    href="./user_profile.html"
-                    class="flex items-center gap-3 px-3 py-2 text-white hover:bg-white/10 rounded-md transition-colors duration-200"
-                  >
-                    <svg
-                      class="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                      />
-                    </svg>
-                    <span class="text-sm">الملف الشخصي</span>
-                  </a>
-                  <a
-                    href="./leaderboard.html"
-                    class="flex items-center gap-3 px-3 py-2 text-white hover:bg-white/10 rounded-md transition-colors duration-200"
-                  >
-                    <svg
-                      class="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                      />
-                    </svg>
-                    <span class="text-sm">لوحة المتصدرين</span>
-                  </a>
-                  <hr class="my-2 border-white/20" />
-                  <a
-                    href="./newlogin.html"
-                    class="flex items-center gap-3 px-3 py-2 text-red-300 hover:bg-red-500/10 rounded-md transition-colors duration-200"
-                  >
-                    <svg
-                      class="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                      />
-                    </svg>
-                    <span class="text-sm">تسجيل الخروج</span>
-                  </a>
-                </div>
-              </div>
-            </div>
+            </a>
           </div>
         </div>
       </div>
