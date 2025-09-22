@@ -1,3 +1,4 @@
+// room-system.js - Fixed version
 import { auth, db } from "./firebase-init.js";
 import { sendFriendRequest } from "./friends.js";
 import {
@@ -22,6 +23,7 @@ let roomListener = null;
 let playersListener = null;
 let currentQuizType = null;
 let currentQuestionCount = 10;
+let isHost = false;
 
 // --- Room Creation Modal ---
 export function setupRoomCreationModal() {
@@ -58,7 +60,7 @@ export function setupRoomCreationModal() {
   joinRoomConfirmBtn?.addEventListener("click", joinRoom);
 }
 
-// Create a new room
+// Create a new room - FIXED VERSION
 async function createRoom() {
   const user = auth.currentUser;
   if (!user) {
@@ -77,8 +79,9 @@ async function createRoom() {
 
     currentQuizType = quizType;
     currentQuestionCount = questionCount;
+    isHost = true;
 
-    // Create room document
+    // Create room document WITHOUT serverTimestamp in arrays
     const roomRef = await addDoc(collection(db, "rooms"), {
       hostId: user.uid,
       hostName: user.displayName || "مضيف",
@@ -94,6 +97,8 @@ async function createRoom() {
           isHost: true,
           isReady: true,
           score: 0,
+          // Remove serverTimestamp() from array - use regular timestamp
+          joinedAt: new Date().toISOString(),
         },
       ],
       currentQuestion: 0,
@@ -103,7 +108,7 @@ async function createRoom() {
 
     currentRoomId = roomRef.id;
 
-    // Add host as first player in subcollection
+    // Add host as first player in subcollection (this can use serverTimestamp)
     await setDoc(doc(db, `rooms/${roomRef.id}/players`, user.uid), {
       uid: user.uid,
       displayName: user.displayName || "مضيف",
@@ -118,7 +123,7 @@ async function createRoom() {
 
     // Show lobby modal
     setTimeout(() => {
-      showLobbyModal(currentRoomId, true); // true indicates user is host
+      showLobbyModal(currentRoomId, true);
     }, 500);
   } catch (error) {
     console.error("Error creating room:", error);
@@ -126,7 +131,7 @@ async function createRoom() {
   }
 }
 
-// Join an existing room
+// Join an existing room - FIXED VERSION
 async function joinRoom() {
   const user = auth.currentUser;
   if (!user) {
@@ -173,18 +178,22 @@ async function joinRoom() {
       return;
     }
 
-    // Add user to room players
+    // Create player data WITHOUT serverTimestamp for array
+    const playerData = {
+      uid: user.uid,
+      displayName: user.displayName || "لاعب",
+      isHost: false,
+      isReady: false,
+      score: 0,
+      joinedAt: new Date().toISOString(), // Use regular timestamp for array
+    };
+
+    // Add user to room players array
     await updateDoc(roomRef, {
-      players: arrayUnion({
-        uid: user.uid,
-        displayName: user.displayName || "لاعب",
-        isHost: false,
-        isReady: false,
-        score: 0,
-      }),
+      players: arrayUnion(playerData),
     });
 
-    // Add user to players subcollection
+    // Add user to players subcollection (this can use serverTimestamp)
     await setDoc(doc(db, `rooms/${roomId}/players`, user.uid), {
       uid: user.uid,
       displayName: user.displayName || "لاعب",
@@ -197,13 +206,14 @@ async function joinRoom() {
     currentRoomId = roomId;
     currentQuizType = roomData.quizType;
     currentQuestionCount = roomData.questionCount;
+    isHost = false;
 
     showToast("تم الانضمام إلى الغرفة بنجاح!", "success");
     hideModal(document.getElementById("joinRoomModal"));
 
     // Show lobby modal
     setTimeout(() => {
-      showLobbyModal(roomId, false); // false indicates user is not host
+      showLobbyModal(roomId, false);
     }, 500);
   } catch (error) {
     console.error("Error joining room:", error);
@@ -212,7 +222,7 @@ async function joinRoom() {
 }
 
 // --- Lobby Modal ---
-function showLobbyModal(roomId, isHost) {
+function showLobbyModal(roomId, userIsHost) {
   const lobbyModal = document.getElementById("lobbyModal");
   const roomCodeElement = document.getElementById("roomCode");
   const roomNameElement = document.getElementById("lobbyRoomName");
@@ -223,18 +233,18 @@ function showLobbyModal(roomId, isHost) {
   const shareRoomBtn = document.getElementById("shareRoomBtn");
   const closeLobbyBtn = document.getElementById("closeLobbyBtn");
   const readyBtn = document.getElementById("readyBtn");
+  const hostControls = document.getElementById("hostControls");
+  const playerControls = document.getElementById("playerControls");
 
   if (roomCodeElement) roomCodeElement.textContent = roomId;
 
-  // Show/hide buttons based on host status
-  if (isHost) {
-    startGameBtn?.classList.remove("hidden");
-    readyBtn?.classList.add("hidden");
-    inviteFriendsBtn?.classList.remove("hidden");
+  // Show/hide controls based on host status
+  if (userIsHost) {
+    hostControls.classList.remove("hidden");
+    playerControls.classList.add("hidden");
   } else {
-    startGameBtn?.classList.add("hidden");
-    readyBtn?.classList.remove("hidden");
-    inviteFriendsBtn?.classList.add("hidden");
+    hostControls.classList.add("hidden");
+    playerControls.classList.remove("hidden");
   }
 
   // Set up real-time listeners
@@ -245,7 +255,7 @@ function showLobbyModal(roomId, isHost) {
     roomInfoElement,
     startGameBtn,
     readyBtn,
-    isHost
+    userIsHost
   );
 
   // Share room ID button
@@ -263,7 +273,9 @@ function showLobbyModal(roomId, isHost) {
   readyBtn?.addEventListener("click", () => toggleReadyStatus(roomId));
 
   // Close lobby
-  closeLobbyBtn?.addEventListener("click", () => closeLobby(roomId, isHost));
+  closeLobbyBtn?.addEventListener("click", () =>
+    closeLobby(roomId, userIsHost)
+  );
 
   showModal(lobbyModal);
 }
@@ -275,7 +287,7 @@ function setupRoomListeners(
   roomInfoElement,
   startGameBtn,
   readyBtn,
-  isHost
+  userIsHost
 ) {
   // Listen to room data
   roomListener = onSnapshot(doc(db, "rooms", roomId), (doc) => {
@@ -294,9 +306,20 @@ function setupRoomListeners(
         `;
       }
 
+      // Update player count displays
+      const playersCount = document.getElementById("playersCount");
+      const readyCount = document.getElementById("readyCount");
+
+      if (playersCount)
+        playersCount.textContent = roomData.players?.length || 0;
+      if (readyCount) {
+        const readyPlayers = roomData.players?.filter((p) => p.isReady) || [];
+        readyCount.textContent = readyPlayers.length;
+      }
+
       // Update start button based on player count and readiness
       if (startGameBtn && roomData.players) {
-        const readyPlayers = roomData.players.filter((p) => p.isReady);
+        const readyPlayers = roomData.players.filter((p) => p.isReady) || [];
         const canStart =
           readyPlayers.length >= 2 &&
           readyPlayers.length === roomData.players.length;
@@ -308,7 +331,7 @@ function setupRoomListeners(
       }
 
       // Update ready button for players
-      if (readyBtn && !isHost) {
+      if (readyBtn && !userIsHost) {
         const user = auth.currentUser;
         const player = roomData.players?.find((p) => p.uid === user?.uid);
         if (player) {
@@ -316,14 +339,14 @@ function setupRoomListeners(
             ? "إلغاء الاستعداد"
             : "أنا مستعد";
           readyBtn.className = player.isReady
-            ? "ready-btn bg-gradient-to-r from-yellow-500 to-orange-600 text-white py-3 px-6 rounded-lg font-medium hover:from-yellow-600 hover:to-orange-700 transition-all duration-200"
-            : "ready-btn bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200";
+            ? "w-full bg-gradient-to-r from-yellow-500 to-orange-600 text-white py-3 px-6 rounded-lg font-medium hover:from-yellow-600 hover:to-orange-700 transition-all duration-200"
+            : "w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200";
         }
       }
 
-      // Update room status
+      // Handle room status changes
       if (roomData.status === "started") {
-        navigateToQuizPage(roomData.quizType, roomId, roomData.questionCount);
+        navigateToGamePage(roomId, roomData.quizType);
       } else if (roomData.status === "ended") {
         showResultsModal(roomId);
       }
@@ -337,38 +360,39 @@ function setupRoomListeners(
       if (playerListElement) {
         playerListElement.innerHTML = "";
 
-        snapshot.docs.forEach((playerDoc, index) => {
+        snapshot.docs.forEach((playerDoc) => {
           const player = playerDoc.data();
           const playerElement = document.createElement("div");
-          playerElement.className = `player-item ${
-            index === 0 ? "joining" : ""
-          }`;
+          playerElement.className =
+            "flex items-center justify-between p-3 bg-white/5 rounded-lg mb-2";
           playerElement.innerHTML = `
-          <div class="player-info">
-            <div class="player-avatar">${
-              player.displayName?.charAt(0) || "?"
-            }</div>
-            <div>
-              <p class="text-white font-medium">${player.displayName}</p>
-              <div class="player-status">
-                <span class="status-dot ${
-                  player.isReady ? "ready" : "waiting"
-                }"></span>
-                <span class="text-blue-200 text-xs">${
-                  player.isReady ? "مستعد" : "في انتظار"
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                <span class="text-white font-bold">${
+                  player.displayName?.charAt(0) || "?"
                 }</span>
-                ${
-                  player.isHost
-                    ? '<span class="text-yellow-400 text-xs">👑</span>'
-                    : ""
-                }
+              </div>
+              <div>
+                <p class="text-white font-medium">${player.displayName}</p>
+                <div class="flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full ${
+                    player.isReady ? "bg-green-500" : "bg-yellow-500"
+                  }"></span>
+                  <span class="text-blue-200 text-xs">${
+                    player.isReady ? "مستعد" : "في انتظار"
+                  }</span>
+                  ${
+                    player.isHost
+                      ? '<span class="text-yellow-400 text-xs">👑 المضيف</span>'
+                      : ""
+                  }
+                </div>
               </div>
             </div>
-          </div>
-          <div class="text-blue-200 text-sm">
-            ${player.score || 0} نقطة
-          </div>
-        `;
+            <div class="text-blue-200 text-sm">
+              ${player.score || 0} نقطة
+            </div>
+          `;
           playerListElement.appendChild(playerElement);
         });
       }
@@ -376,7 +400,7 @@ function setupRoomListeners(
   );
 }
 
-// Toggle ready status for players
+// Toggle ready status for players - FIXED VERSION
 async function toggleReadyStatus(roomId) {
   const user = auth.currentUser;
   if (!user) return;
@@ -422,6 +446,32 @@ function getQuizTypeName(quizType) {
     mixed: "كوكتيل أسئلة",
   };
   return types[quizType] || quizType;
+}
+
+// --- Start Game ---
+async function startGame(roomId) {
+  try {
+    await updateDoc(doc(db, "rooms", roomId), {
+      status: "started",
+      startedAt: serverTimestamp(),
+      currentQuestion: 0,
+    });
+
+    // Navigate to game page
+    navigateToGamePage(roomId);
+  } catch (error) {
+    console.error("Error starting game:", error);
+    showToast("فشل في بدء اللعبة", "error");
+  }
+}
+
+// --- Navigate to Game Page ---
+function navigateToGamePage(roomId, quizType = null) {
+  closeAllModals();
+
+  setTimeout(() => {
+    window.location.href = `room.html?roomId=${roomId}`;
+  }, 500);
 }
 
 // --- Share Room ID ---
@@ -500,7 +550,7 @@ async function loadFriendsForInvitation(container, roomId) {
         const friendUserData = friendUserDoc.data();
         const friendElement = document.createElement("div");
         friendElement.className =
-          "flex items-center justify-between p-3 bg-white/5 rounded-lg";
+          "flex items-center justify-between p-3 bg-white/5 rounded-lg mb-2";
         friendElement.innerHTML = `
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
@@ -517,12 +567,9 @@ async function loadFriendsForInvitation(container, roomId) {
               } نقطة</p>
             </div>
           </div>
-          <button class="invite-friend-btn room-action-btn invite-btn" data-friend-id="${
+          <button class="invite-friend-btn bg-gradient-to-r from-purple-500 to-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:from-purple-600 hover:to-pink-700 transition-all duration-200" data-friend-id="${
             friendData.friendId
           }">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
             دعوة
           </button>
         `;
@@ -573,32 +620,8 @@ async function sendInvitesToFriends(roomId) {
   showToast("سيتم إضافة هذه الميزة قريباً!", "info");
 }
 
-// --- Start Game ---
-async function startGame(roomId) {
-  try {
-    await updateDoc(doc(db, "rooms", roomId), {
-      status: "started",
-      startedAt: serverTimestamp(),
-      currentQuestion: 0,
-      scores: {},
-    });
-  } catch (error) {
-    console.error("Error starting game:", error);
-    showToast("فشل في بدء اللعبة", "error");
-  }
-}
-
-// --- Navigate to Quiz Page ---
-function navigateToQuizPage(quizType, roomId, questionCount) {
-  closeAllModals();
-
-  setTimeout(() => {
-    window.location.href = `training-page.html?roomId=${roomId}&quizType=${quizType}&questionCount=${questionCount}&mode=multiplayer`;
-  }, 500);
-}
-
 // --- Utility Functions ---
-async function closeLobby(roomId, isHost) {
+async function closeLobby(roomId, userIsHost) {
   if (roomId) {
     const user = auth.currentUser;
     if (user) {
@@ -614,7 +637,7 @@ async function closeLobby(roomId, isHost) {
           );
 
           // If host leaves or no players left, end the room
-          if (isHost || updatedPlayers.length === 0) {
+          if (userIsHost || updatedPlayers.length === 0) {
             await updateDoc(roomRef, {
               status: "ended",
               endedAt: serverTimestamp(),
@@ -685,6 +708,12 @@ function showToast(message, type = "info") {
   document.dispatchEvent(
     new CustomEvent("showToast", { detail: { message, type } })
   );
+}
+
+// Show results modal (placeholder)
+function showResultsModal(roomId) {
+  // Implement results display logic here
+  console.log("Game ended, showing results for room:", roomId);
 }
 
 // Initialize room system

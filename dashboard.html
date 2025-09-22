@@ -1416,28 +1416,38 @@
       <!-- Players List -->
       <div class="lg:col-span-2">
         <h4 class="text-lg font-bold text-white mb-4">اللاعبون في الغرفة</h4>
-        <div id="lobbyPlayerList" class="player-list">
+        <div id="lobbyPlayerList" class="player-list space-y-3">
           <!-- Players will be populated here -->
         </div>
       </div>
       
       <!-- Room Controls -->
-      <div class="lobby-controls">
-        <button id="startGameBtn" class="start-game-btn bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-          بانتظار اللاعبين...
-        </button>
+      <div class="lobby-controls space-y-4">
+        <!-- Host Controls -->
+        <div id="hostControls" class="hidden">
+          <button id="startGameBtn" class="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            بدء اللعبة
+          </button>
+        </div>
+        
+        <!-- Player Controls -->
+        <div id="playerControls" class="hidden">
+          <button id="readyBtn" class="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-200">
+            أنا مستعد
+          </button>
+        </div>
         
         <div class="bg-white/5 rounded-lg p-4">
           <p class="text-white text-sm font-medium">معلومات الغرفة</p>
           <p class="text-blue-200 text-xs mt-1" id="roomInfo">نوع التحدي: كوكتيل أسئلة</p>
           <p class="text-blue-200 text-xs">عدد الأسئلة: 10</p>
-          <p class="text-blue-200 text-xs">اللاعبون: 1/8</p>
+          <p class="text-blue-200 text-xs">اللاعبون: <span id="playersCount">1</span>/8</p>
+          <p class="text-blue-200 text-xs">المستعدون: <span id="readyCount">0</span></p>
         </div>
       </div>
     </div>
   </div>
 </div>
-
 <!-- Invite Friends Modal -->
 <div id="inviteFriendsModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 opacity-0 pointer-events-none transition-all duration-300 z-50">
   <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-8 max-w-md w-full border border-white/20 transform scale-95 transition-transform duration-300 max-h-[80vh] overflow-y-auto">

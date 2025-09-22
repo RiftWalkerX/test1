@@ -1,4 +1,4 @@
-// room-game.js
+// room-game.js - Updated version
 import { auth, db } from "./firebase-init.js";
 import {
   doc,
@@ -17,7 +17,7 @@ class RoomGame {
     this.roomId = null;
     this.userId = null;
     this.roomData = null;
-    this.currentQuestion = 0;
+    this.currentQuestionIndex = 0;
     this.totalQuestions = 10;
     this.userScore = 0;
     this.currentStreak = 0;
@@ -26,6 +26,7 @@ class RoomGame {
     this.hasAnswered = false;
     this.questions = [];
     this.players = [];
+    this.quizType = "mixed";
 
     this.init();
   }
@@ -85,20 +86,144 @@ class RoomGame {
       }
 
       this.roomData = roomDoc.data();
+      this.quizType = this.roomData.quizType || "mixed";
       this.totalQuestions = this.roomData.questionCount || 10;
 
       // Update UI with room info
       this.updateRoomInfo();
 
-      // Load questions from GitHub based on quiz type
-      await this.loadQuestionsFromGitHub();
+      // Load questions based on quiz type
+      await this.loadQuestions();
 
       // Hide loading overlay
       this.hideLoading();
+
+      // Start the game if it's already started
+      if (this.roomData.status === "started") {
+        this.startGame();
+      }
     } catch (error) {
       console.error("Error loading room data:", error);
       this.showError("فشل تحميل بيانات الغرفة");
     }
+  }
+
+  async loadQuestions() {
+    try {
+      const now = Date.now();
+      let questions = [];
+
+      // Load questions based on quiz type
+      switch (this.quizType) {
+        case "sms":
+          questions = await this.loadSMSQuestions(now);
+          break;
+        case "dialogue":
+          questions = await this.loadDialogueQuestions(now);
+          break;
+        case "image":
+          questions = await this.loadImageQuestions(now);
+          break;
+        case "mixed":
+        default:
+          questions = await this.loadMixedQuestions(now);
+          break;
+      }
+
+      this.questions = questions.slice(0, this.totalQuestions);
+
+      if (this.questions.length === 0) {
+        this.questions = this.generateSampleQuestions();
+        this.showToast("تم استخدام أسئلة تجريبية", "warning");
+      }
+    } catch (error) {
+      console.error("Error loading questions:", error);
+      this.questions = this.generateSampleQuestions();
+      this.showToast(
+        "تم استخدام أسئلة تجريبية بسبب مشكلة في التحميل",
+        "warning"
+      );
+    }
+  }
+
+  async loadSMSQuestions(timestamp) {
+    const response = await fetch(
+      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${timestamp}`
+    );
+    if (!response.ok) throw new Error("Failed to fetch SMS questions");
+
+    const data = await response.json();
+    return data.map((sms, index) => ({
+      id: index + 1,
+      type: "sms",
+      content: sms.text,
+      sender: sms.sender || "جهة مجهولة",
+      timestamp: "الآن",
+      correctAnswer: sms.isPhish ? "phishing" : "safe",
+      difficulty: sms.difficulty || 2,
+      explanation: sms.explanation || "لا توجد تفاصيل إضافية",
+    }));
+  }
+
+  async loadDialogueQuestions(timestamp) {
+    const response = await fetch(
+      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${timestamp}`
+    );
+    if (!response.ok) throw new Error("Failed to fetch dialogue questions");
+
+    const data = await response.json();
+    return data.map((dialogue, index) => ({
+      id: index + 1,
+      type: "dialogue",
+      messages: dialogue.messages || [],
+      correctAnswers: dialogue.correctAnswers || [],
+      difficulty: dialogue.difficulty || 2,
+      explanation: dialogue.explanation || "لا توجد تفاصيل إضافية",
+    }));
+  }
+
+  async loadImageQuestions(timestamp) {
+    const response = await fetch(
+      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${timestamp}`
+    );
+    if (!response.ok) throw new Error("Failed to fetch image questions");
+
+    const data = await response.json();
+    return data.map((image, index) => ({
+      id: index + 1,
+      type: "image",
+      imageUrl: image.url,
+      description: image.description || "",
+      correctAnswer: image.isPhish ? "phishing" : "safe",
+      difficulty: image.difficulty || 2,
+      explanation: image.explanation || "لا توجد تفاصيل إضافية",
+    }));
+  }
+
+  async loadMixedQuestions(timestamp) {
+    const [smsQuestions, dialogueQuestions, imageQuestions] = await Promise.all(
+      [
+        this.loadSMSQuestions(timestamp).catch(() => []),
+        this.loadDialogueQuestions(timestamp).catch(() => []),
+        this.loadImageQuestions(timestamp).catch(() => []),
+      ]
+    );
+
+    // Combine and shuffle questions
+    const allQuestions = [
+      ...smsQuestions,
+      ...dialogueQuestions,
+      ...imageQuestions,
+    ];
+    return this.shuffleArray(allQuestions);
+  }
+
+  shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
   }
 
   setupRealtimeListeners() {
@@ -128,273 +253,387 @@ class RoomGame {
     }
 
     // Handle question progression
-    if (newData.currentQuestion !== this.currentQuestion) {
-      this.currentQuestion = newData.currentQuestion;
-      this.loadQuestion();
+    if (newData.currentQuestion !== this.currentQuestionIndex) {
+      this.currentQuestionIndex = newData.currentQuestion;
+      if (this.roomData.status === "started") {
+        this.loadQuestion();
+      }
     }
 
     this.updateRoomInfo();
   }
 
-  async loadQuestionsFromGitHub() {
+  startGame() {
+    this.currentQuestionIndex = this.roomData.currentQuestion || 0;
+    this.loadQuestion();
+    this.startTimer();
+  }
+
+  loadQuestion() {
+    if (this.currentQuestionIndex >= this.questions.length) {
+      this.endGame();
+      return;
+    }
+
+    const question = this.questions[this.currentQuestionIndex];
+    this.hasAnswered = false;
+
+    // Hide all states
+    this.hideElement("loadingState");
+    this.hideElement("waitingState");
+    this.hideElement("resultsState");
+    this.showElement("questionContent");
+
+    // Hide all question types
+    this.hideAllQuestionTypes();
+
+    // Show appropriate question type
+    switch (question.type) {
+      case "sms":
+        this.showSMSQuestion(question);
+        break;
+      case "dialogue":
+        this.showDialogueQuestion(question);
+        break;
+      case "image":
+        this.showImageQuestion(question);
+        break;
+    }
+
+    this.updateQuestionProgress();
+    this.updateDifficultyIndicator(question.difficulty);
+  }
+
+  showSMSQuestion(question) {
+    this.showElement("smsQuestion");
+    document.getElementById("smsContent").textContent = question.content;
+    document.getElementById("smsSender").textContent = question.sender;
+    document.getElementById("smsTimestamp").textContent = question.timestamp;
+  }
+
+  showDialogueQuestion(question) {
+    this.showElement("dialogueQuestion");
+    const messagesContainer = document.getElementById("dialogueMessages");
+    messagesContainer.innerHTML = "";
+
+    question.messages.forEach((msg, index) => {
+      const messageElement = document.createElement("div");
+      messageElement.className = `flex ${
+        msg.isUser ? "justify-start" : "justify-end"
+      }`;
+      messageElement.innerHTML = `
+        <div class="max-w-xs bg-white/10 rounded-lg p-3">
+          <p class="text-white">${msg.text}</p>
+          <p class="text-blue-200 text-xs mt-1">${msg.time}</p>
+        </div>
+      `;
+      messagesContainer.appendChild(messageElement);
+    });
+
+    // Show submit button for dialogue questions
+    this.showElement("submitDialogue");
+  }
+
+  showImageQuestion(question) {
+    this.showElement("imageQuestion");
+    const imgElement = document.getElementById("questionImage");
+    imgElement.src = question.imageUrl;
+    imgElement.alt = question.description;
+    document.getElementById("imageDescription").textContent =
+      question.description;
+  }
+
+  async handleAnswer(answer) {
+    if (this.hasAnswered) return;
+
+    const question = this.questions[this.currentQuestionIndex];
+    const isCorrect = this.checkAnswer(answer, question);
+
+    this.hasAnswered = true;
+
+    // Update player score
+    if (isCorrect) {
+      this.userScore += 50;
+      this.currentStreak++;
+    } else {
+      this.currentStreak = 0;
+    }
+
+    // Update Firestore
+    await this.updatePlayerScore();
+
+    // Show results
+    this.showResults(isCorrect, question.explanation);
+  }
+
+  checkAnswer(answer, question) {
+    if (question.type === "dialogue") {
+      // For dialogue questions, we need to check multiple answers
+      // This is a simplified version - you'll need to implement the actual logic
+      return answer === "safe"; // Placeholder
+    }
+    return answer === question.correctAnswer;
+  }
+
+  async updatePlayerScore() {
     try {
-      const now = Date.now();
-      const quizType = this.roomData.quizType || "mixed";
-
-      // Fetch data from GitHub repositories
-      const [smsRes, dialogueRes, imageRes] = await Promise.all([
-        fetch(
-          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${now}`
-        ),
-        fetch(
-          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${now}`
-        ),
-        fetch(
-          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${now}`
-        ),
-      ]);
-
-      if (!smsRes.ok || !dialogueRes.ok || !imageRes.ok) {
-        throw new Error("Failed to fetch questions from GitHub");
-      }
-
-      const smsData = await smsRes.json();
-      const dialogueData = await dialogueRes.json();
-      const imageData = await imageRes.json();
-
-      // Map the data to your question format
-      this.questions = this.generateQuestionsFromData(
-        smsData,
-        dialogueData,
-        imageData,
-        quizType
-      );
+      const playerRef = doc(db, `rooms/${this.roomId}/players`, this.userId);
+      await updateDoc(playerRef, {
+        score: this.userScore,
+        lastAnswer: serverTimestamp(),
+      });
     } catch (error) {
-      console.error("Error loading questions from GitHub:", error);
-      this.questions = this.generateSampleQuestions();
-      this.showToast(
-        "تم استخدام أسئلة تجريبية بسبب مشكلة في التحميل",
-        "warning"
-      );
+      console.error("Error updating player score:", error);
     }
   }
 
-  generateQuestionsFromData(smsData, dialogueData, imageData, quizType) {
-    // Placeholder: Implement actual mapping logic here
-    // Note: Original code was truncated, so this is a placeholder
-    const questions = [];
-    // Example mapping (replace with actual logic from your original code)
-    if (quizType === "sms" || quizType === "mixed") {
-      questions.push(
-        ...smsData.map((sms) => ({
-          id: sms.id,
-          type: "sms",
-          content: sms.text,
-          sender: sms.sender || "جهة مجهولة",
-          timestamp: "الآن",
-          correctAnswer: sms.isPhish ? "phishing" : "safe",
-          difficulty: sms.difficulty || 2,
-          explanation: sms.explanation || "لا توجد تفاصيل إضافية",
-        }))
-      );
+  showResults(isCorrect, explanation) {
+    this.hideElement("questionContent");
+    this.showElement("resultsState");
+
+    const resultIcon = document.getElementById("resultIcon");
+    const resultTitle = document.getElementById("resultTitle");
+    const resultMessage = document.getElementById("resultMessage");
+    const resultExplanation = document.getElementById("resultExplanation");
+    const pointsEarned = document.getElementById("pointsEarned");
+    const playersCorrect = document.getElementById("playersCorrect");
+
+    if (isCorrect) {
+      resultIcon.textContent = "✓";
+      resultTitle.textContent = "إجابة صحيحة!";
+      resultMessage.textContent = "لقد تعرفت بنجاح على محاولة الاحتيال.";
+      resultTitle.className = "text-xl font-bold text-white mb-2";
+    } else {
+      resultIcon.textContent = "✗";
+      resultTitle.textContent = "إجابة خاطئة";
+      resultMessage.textContent = "كانت هذه محاولة احتيال.";
+      resultTitle.className = "text-xl font-bold text-red-400 mb-2";
     }
-    // Add similar mappings for dialogueData and imageData based on quizType
-    return questions;
+
+    resultExplanation.textContent = explanation;
+    pointsEarned.textContent = isCorrect ? "+50" : "+0";
+
+    // Calculate how many players answered correctly (simplified)
+    const correctPlayers = this.players.filter((p) => p.lastAnswer).length;
+    playersCorrect.textContent = `${correctPlayers}/${this.players.length}`;
+
+    // Move to next question after delay
+    setTimeout(() => {
+      this.nextQuestion();
+    }, 3000);
   }
 
-  // Fallback method for sample questions
-  generateSampleQuestions() {
-    const questions = [];
-    for (let i = 0; i < this.totalQuestions; i++) {
-      questions.push({
-        id: i + 1,
-        type: "sms",
-        content:
-          "هذا سؤال تجريبي. الجواب الصحيح: " +
-          (Math.random() > 0.5 ? "احتيال" : "آمنة"),
-        sender: "جهة مجهولة",
-        timestamp: "الآن",
-        correctAnswer: Math.random() > 0.5 ? "phishing" : "safe",
-        difficulty: 2,
-        explanation: "هذا سؤال تجريبي للعرض فقط",
+  async nextQuestion() {
+    this.currentQuestionIndex++;
+
+    if (this.currentQuestionIndex >= this.totalQuestions) {
+      this.endGame();
+    } else {
+      // Update room's current question
+      await updateDoc(doc(db, "rooms", this.roomId), {
+        currentQuestion: this.currentQuestionIndex,
       });
     }
-    return questions;
   }
 
-  // Utility methods
+  startTimer() {
+    this.timer = 30;
+    this.updateTimerDisplay();
+
+    this.timerInterval = setInterval(() => {
+      this.timer--;
+      this.updateTimerDisplay();
+
+      if (this.timer <= 0) {
+        clearInterval(this.timerInterval);
+        this.handleTimeUp();
+      }
+    }, 1000);
+  }
+
+  handleTimeUp() {
+    if (!this.hasAnswered) {
+      this.handleAnswer(""); // Force answer as wrong
+    }
+  }
+
+  endGame() {
+    clearInterval(this.timerInterval);
+
+    // Update room status
+    updateDoc(doc(db, "rooms", this.roomId), {
+      status: "ended",
+      endedAt: serverTimestamp(),
+    });
+
+    this.showGameOverModal();
+  }
+
+  showGameOverModal() {
+    const modal = document.getElementById("gameOverModal");
+    const finalScores = document.getElementById("finalScores");
+
+    // Sort players by score
+    const sortedPlayers = [...this.players].sort((a, b) => b.score - a.score);
+
+    finalScores.innerHTML = sortedPlayers
+      .map(
+        (player, index) => `
+      <div class="flex items-center justify-between ${
+        index === 0 ? "text-yellow-400" : "text-white"
+      }">
+        <div class="flex items-center gap-3">
+          <span class="font-bold">${index + 1}.</span>
+          <span>${player.displayName}</span>
+          ${player.isHost ? '<span class="text-yellow-400">👑</span>' : ""}
+        </div>
+        <span class="font-bold">${player.score} نقطة</span>
+      </div>
+    `
+      )
+      .join("");
+
+    modal.classList.remove("hidden");
+  }
+
+  // Helper methods for UI management
+  showElement(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) element.classList.remove("hidden");
+  }
+
+  hideElement(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) element.classList.add("hidden");
+  }
+
+  hideAllQuestionTypes() {
+    this.hideElement("smsQuestion");
+    this.hideElement("dialogueQuestion");
+    this.hideElement("imageQuestion");
+    this.hideElement("submitDialogue");
+  }
+
   updateRoomInfo() {
-    document.getElementById("roomTitle").textContent =
+    document.getElementById("roomName").textContent =
       this.roomData?.roomName || "غرفة التدريب";
-    document.getElementById(
-      "roomCodeDisplay"
-    ).textContent = `رمز: ${this.roomId}`;
+    document.getElementById("quizType").textContent = this.getQuizTypeName(
+      this.quizType
+    );
   }
 
   updateQuestionProgress() {
-    document.getElementById("questionProgress").textContent = `سؤال ${
-      this.currentQuestion + 1
-    } من ${this.totalQuestions}`;
+    document.getElementById("currentQuestion").textContent =
+      this.currentQuestionIndex + 1;
+    document.getElementById("totalQuestions").textContent = this.totalQuestions;
   }
 
-  updateScoreDisplay() {
-    document.getElementById("userPoints").textContent = this.userScore;
-    document.getElementById("currentStreak").textContent = this.currentStreak;
+  updateDifficultyIndicator(difficulty) {
+    const stars = document.querySelectorAll(".difficulty-star");
+    stars.forEach((star, index) => {
+      if (index < difficulty) {
+        star.classList.add("text-yellow-400");
+        star.classList.remove("text-gray-400");
+      } else {
+        star.classList.remove("text-yellow-400");
+        star.classList.add("text-gray-400");
+      }
+    });
   }
 
   updateTimerDisplay() {
-    document.getElementById("timer").textContent = this.timer;
+    const timerElement = document.getElementById("timer");
+    if (timerElement) {
+      timerElement.textContent = this.timer;
+      timerElement.className = `text-2xl font-bold ${
+        this.timer <= 10 ? "text-red-400 animate-pulse" : "text-white"
+      }`;
+    }
   }
 
   updatePlayersStatus() {
-    const container = document.getElementById("playersStatus");
-    if (!container) return;
+    const playersList = document.getElementById("playersList");
+    if (!playersList) return;
 
-    container.innerHTML = this.players
+    playersList.innerHTML = this.players
       .map(
         (player) => `
-      <div class="text-center">
-        <div class="w-12 h-12 mx-auto mb-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center relative">
-          <span class="text-white font-bold">${
-            player.displayName?.charAt(0) || "?"
-          }</span>
-          ${
-            player.lastAnswer
-              ? '<div class="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></div>'
-              : ""
-          }
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 rounded-full ${
+            player.isReady ? "bg-green-500" : "bg-yellow-500"
+          }"></div>
+          <span class="text-white">${player.displayName}</span>
+          ${player.isHost ? '<span class="text-yellow-400">👑</span>' : ""}
         </div>
-        <p class="text-white text-sm font-medium truncate">${
-          player.displayName
-        }</p>
-        <p class="text-blue-200 text-xs">${player.score || 0} نقطة</p>
-        ${
-          player.isHost
-            ? '<p class="text-yellow-400 text-xs">👑 المضيف</p>'
-            : ""
-        }
+        <span class="text-blue-200">${player.score || 0}</span>
       </div>
     `
       )
       .join("");
   }
 
-  updateDifficultyIndicator(difficulty) {
-    const stars = document.querySelectorAll("#difficultyStars svg");
-    const labels = ["سهل", "متوسط", "صعب", "خبير", "متقدم"];
-
-    stars.forEach((star, index) => {
-      star.classList.toggle("text-yellow-400", index < difficulty);
-      star.classList.toggle("text-white/30", index >= difficulty);
-    });
-
-    const labelElement = document.querySelector(
-      "#difficultyStars + .text-blue-200"
-    );
-    if (labelElement) {
-      labelElement.textContent = labels[difficulty - 1] || "متوسط";
-    }
-  }
-
-  hideAllQuestionTypes() {
-    ["smsQuestion", "dialogueQuestion", "imageQuestion"].forEach((id) => {
-      this.hideElement(id);
-    });
-  }
-
-  showElement(id) {
-    const element = document.getElementById(id);
-    if (element) element.classList.remove("hidden");
-  }
-
-  hideElement(id) {
-    const element = document.getElementById(id);
-    if (element) element.classList.add("hidden");
-  }
-
-  showModal(modal) {
-    if (!modal) return;
-    modal.classList.remove("opacity-0", "pointer-events-none");
+  getQuizTypeName(quizType) {
+    const types = {
+      sms: "رسائل SMS",
+      dialogue: "حوارات",
+      image: "صور مشبوهة",
+      mixed: "كوكتيل أسئلة",
+    };
+    return types[quizType] || quizType;
   }
 
   hideLoading() {
-    this.hideElement("loadingOverlay");
+    document.getElementById("loadingOverlay")?.classList.add("hidden");
   }
 
   showError(message) {
-    const overlay = document.getElementById("loadingOverlay");
-    if (overlay) {
-      overlay.innerHTML = `
-        <div class="text-center">
-          <div class="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-red-500 to-orange-600 rounded-full flex items-center justify-center">
-            <svg class="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-            </svg>
-          </div>
-          <h3 class="text-xl font-bold text-white mb-2">خطأ</h3>
-          <p class="text-blue-200 mb-4">${message}</p>
-          <button onclick="window.location.href='dashboard.html'" class="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-2 rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200">
-            العودة للوحة التحكم
-          </button>
-        </div>
-      `;
-    }
+    alert(message);
   }
 
   showToast(message, type = "info") {
-    // Dispatch toast event that will be handled by dashboard.js
-    document.dispatchEvent(
-      new CustomEvent("showToast", { detail: { message, type } })
-    );
+    // Implement toast notification
+    console.log(`${type}: ${message}`);
   }
 
-  escapeHtml(str) {
-    if (!str) return "";
-    return String(str)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
-  }
-
-  // Placeholder for missing methods (based on typical quiz game logic)
-  startGame() {
-    // Implement game start logic
-    console.log("Game started");
-  }
-
-  endGame() {
-    // Implement game end logic
-    console.log("Game ended");
-  }
-
-  loadQuestion() {
-    // Implement question loading logic
-    console.log(`Loading question ${this.currentQuestion + 1}`);
-  }
-
-  handleAnswer(answer) {
-    // Implement answer handling logic
-    console.log(`Answer selected: ${answer}`);
-  }
-
-  handleDialogueAnswer() {
-    // Implement dialogue answer handling logic
-    console.log("Dialogue answer submitted");
+  generateSampleQuestions() {
+    // Generate sample questions if API fails
+    return [
+      {
+        id: 1,
+        type: "sms",
+        content:
+          "عزيزي العميل، لديك رصيد مجاني 10 دينار. لاستلامه اضغط على الرابط: bit.ly/free-balance",
+        sender: "اتصالات",
+        timestamp: "الآن",
+        correctAnswer: "phishing",
+        difficulty: 2,
+        explanation: "هذه رسالة تصيد تحتوي على رابط مختصر مشبوه",
+      },
+      {
+        id: 2,
+        type: "dialogue",
+        messages: [
+          {
+            text: "مرحباً، أنا من شركة Microsoft ولدينا مشكلة في حسابك",
+            isUser: false,
+            time: "10:30 ص",
+          },
+          {
+            text: "ما هي المشكلة؟",
+            isUser: true,
+            time: "10:31 ص",
+          },
+        ],
+        correctAnswers: ["phishing"],
+        difficulty: 3,
+        explanation: "شركة Microsoft لا تتصل بالعملاء بهذه الطريقة",
+      },
+    ];
   }
 }
 
-// Initialize the game when DOM is loaded
+// Initialize the game when the page loads
 document.addEventListener("DOMContentLoaded", () => {
-  // Wait for auth state to resolve before checking or initializing
-  auth.onAuthStateChanged((user) => {
-    console.log("Auth state resolved:", user ? user.uid : "No user");
-    if (!user) {
-      window.location.href = "newlogin.html";
-      return;
-    }
-    // User is confirmed signed in—proceed with init
-    new RoomGame();
-  });
+  new RoomGame();
 });

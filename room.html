@@ -290,6 +290,46 @@
             <p class="text-blue-200" id="loadingMessage">يرجى الانتظار</p>
         </div>
     </div>
+    <!-- Add these sections to your room.html -->
+
+<!-- SMS Question Type -->
+<div id="smsQuestion" class="hidden">
+  <div class="bg-white/5 rounded-xl p-6 mb-6">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+        <span class="text-white font-bold">?</span>
+      </div>
+      <div>
+        <p id="smsSender" class="text-white font-medium">جهة مجهولة</p>
+        <p id="smsTimestamp" class="text-blue-200 text-sm">الآن</p>
+      </div>
+    </div>
+    <p id="smsContent" class="text-white text-lg leading-relaxed"></p>
+  </div>
+</div>
+
+<!-- Dialogue Question Type -->
+<div id="dialogueQuestion" class="hidden">
+  <div class="bg-white/5 rounded-xl p-6 mb-6 max-h-80 overflow-y-auto">
+    <div id="dialogueMessages" class="space-y-4">
+      <!-- Dialogue messages will be populated here -->
+    </div>
+  </div>
+  <div class="flex gap-4">
+    <input type="text" id="dialogueInput" placeholder="اكتب ردك هنا..." class="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-blue-200">
+    <button id="submitDialogue" class="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200">
+      إرسال
+    </button>
+  </div>
+</div>
+
+<!-- Image Question Type -->
+<div id="imageQuestion" class="hidden">
+  <div class="bg-white/5 rounded-xl p-6 mb-6">
+    <img id="questionImage" src="" alt="" class="w-full h-64 object-cover rounded-lg mb-4">
+    <p id="imageDescription" class="text-white text-lg text-center"></p>
+  </div>
+</div>
         <script type="module" src="room-game.js"></script>
             <script type="module" src="firebase-init.js"></script>
 
