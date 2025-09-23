@@ -155,22 +155,89 @@ export const loadRoomInvites = async function () {
 };
 
 // --- HANDLE ROOM INVITE ACTIONS ---
+// --- HANDLE ROOM INVITE ACTIONS ---
 window.acceptRoomInvite = async function (inviteId, roomId) {
   try {
     const user = auth.currentUser;
-    if (!user) return;
-    const inviteRef = doc(db, "roomInvites", inviteId);
-    await updateDoc(inviteRef, { status: "accepted", respondedAt: new Date() });
-    window.location.href = `room.html?id=${roomId}`;
+    if (!user) {
+      showToast("يجب تسجيل الدخول أولاً", "error");
+      return;
+    }
+
+    // Check if room exists and is waiting
+    const roomRef = doc(db, "rooms", roomId);
+    const roomDoc = await getDoc(roomRef);
+
+    if (!roomDoc.exists()) {
+      showToast("الغرفة لم تعد موجودة", "error");
+      // Mark invite as expired
+      await updateDoc(doc(db, "roomInvites", inviteId), {
+        status: "expired",
+        respondedAt: serverTimestamp()
+      });
+      await loadRoomInvites();
+      return;
+    }
+
+    const roomData = roomDoc.data();
+    
+    if (roomData.status !== "waiting") {
+      showToast("لا يمكن الانضمام إلى هذه الغرفة حالياً", "error");
+      await updateDoc(doc(db, "roomInvites", inviteId), {
+        status: "expired", 
+        respondedAt: serverTimestamp()
+      });
+      await loadRoomInvites();
+      return;
+    }
+
+    // Check if user is already in the room
+    const existingPlayer = roomData.players.find(p => p.uid === user.uid);
+    if (existingPlayer) {
+      showToast("أنت بالفعل في هذه الغرفة", "info");
+      await updateDoc(doc(db, "roomInvites", inviteId), {
+        status: "accepted",
+        respondedAt: serverTimestamp()
+      });
+      // Navigate to lobby instead of directly to room
+      window.location.href = `dashboard.html?joinRoom=${roomId}`;
+      return;
+    }
+
+    // Add user to room
+    const playerData = {
+      uid: user.uid,
+      displayName: user.displayName || "لاعب",
+      isHost: false,
+      isReady: false,
+      score: 0,
+      joinedAt: new Date().toISOString(),
+    };
+
+    await updateDoc(roomRef, {
+      players: arrayUnion(playerData)
+    });
+
+    // Add to players subcollection
+    await setDoc(doc(db, `rooms/${roomId}/players`, user.uid), {
+      ...playerData,
+      joinedAt: serverTimestamp()
+    });
+
+    // Update invite status
+    await updateDoc(doc(db, "roomInvites", inviteId), {
+      status: "accepted",
+      respondedAt: serverTimestamp()
+    });
+
+    showToast("تم الانضمام إلى الغرفة بنجاح!", "success");
+    
+    // Navigate to dashboard with room parameter to open lobby
+    window.location.href = `dashboard.html?joinRoom=${roomId}`;
+
   } catch (error) {
-    document.dispatchEvent(
-      new CustomEvent("showToast", {
-        detail: {
-          message: "فشل في قبول دعوة الغرفة: " + error.message,
-          type: "error",
-        },
-      })
-    );
+    console.error("Error accepting room invite:", error);
+    showToast("فشل في الانضمام إلى الغرفة: " + error.message, "error");
   }
 };
 window.declineRoomInvite = async function (inviteId) {

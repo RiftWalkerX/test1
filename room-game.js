@@ -242,7 +242,13 @@ class RoomGame {
         image: imageData.length,
       });
 
-      // Transform questions based on quiz type
+      // Use the exact number of questions the host selected
+      this.totalQuestions = this.roomData.questionCount || 10;
+      console.log(
+        `Loading ${this.totalQuestions} questions for quiz type: ${this.quizType}`
+      );
+
+      // Transform questions
       let allQuestions = [];
 
       // SMS questions
@@ -262,7 +268,7 @@ class RoomGame {
         id: `dialogue-${index}`,
         type: "dialogue",
         messages: dialogue.messages || [],
-        correctAnswer: "phishing", // Default for dialogue questions
+        correctAnswer: dialogue.isPhish ? "phishing" : "safe", // Use actual data
         difficulty: dialogue.difficulty || 2,
         explanation: dialogue.explanation || "لا توجد تفاصيل إضافية",
       }));
@@ -278,20 +284,29 @@ class RoomGame {
         explanation: image.explanation || "لا توجد تفاصيل إضافية",
       }));
 
-      // Select questions based on quiz type
+      // Select questions based on quiz type and exact count
       switch (this.quizType) {
         case "sms":
-          allQuestions = smsQuestions;
+          allQuestions = this.shuffleArray(smsQuestions).slice(
+            0,
+            this.totalQuestions
+          );
           break;
         case "dialogue":
-          allQuestions = dialogueQuestions;
+          allQuestions = this.shuffleArray(dialogueQuestions).slice(
+            0,
+            this.totalQuestions
+          );
           break;
         case "image":
-          allQuestions = imageQuestions;
+          allQuestions = this.shuffleArray(imageQuestions).slice(
+            0,
+            this.totalQuestions
+          );
           break;
         case "mixed":
         default:
-          // Mix questions proportionally
+          // Mix questions proportionally based on exact count
           const smsCount = Math.ceil(this.totalQuestions * 0.4);
           const dialogueCount = Math.ceil(this.totalQuestions * 0.3);
           const imageCount = this.totalQuestions - smsCount - dialogueCount;
@@ -301,25 +316,21 @@ class RoomGame {
             ...this.shuffleArray(dialogueQuestions).slice(0, dialogueCount),
             ...this.shuffleArray(imageQuestions).slice(0, imageCount),
           ];
+
+          // Ensure exact count
+          allQuestions = allQuestions.slice(0, this.totalQuestions);
           break;
       }
 
-      // Shuffle and limit to total questions
-      this.questions = this.shuffleArray(allQuestions).slice(
-        0,
-        this.totalQuestions
-      );
-      console.log(
-        `Loaded ${this.questions.length} questions for quiz type: ${this.quizType}`
-      );
+      this.questions = allQuestions;
+      console.log(`Loaded ${this.questions.length} questions`);
     } catch (error) {
       console.error("Error loading questions from GitHub:", error);
-      // Fallback to sample questions
+      // Fallback with exact count
       this.questions = this.generateSampleQuestions().slice(
         0,
         this.totalQuestions
       );
-      console.log("Using fallback questions:", this.questions.length);
     }
   }
 
@@ -400,25 +411,73 @@ class RoomGame {
     const submitBtn = document.getElementById("submitDialogueBtn");
 
     if (messagesContainer) {
-      messagesContainer.innerHTML = "";
-      (question.messages || []).forEach((msg, index) => {
-        const messageElement = document.createElement("div");
-        messageElement.className = `flex ${
-          msg.isUser ? "justify-start" : "justify-end"
-        }`;
-        messageElement.innerHTML = `
-          <div class="max-w-xs bg-white/10 rounded-lg p-3">
-            <p class="text-white">${msg.text || "رسالة"}</p>
-            <p class="text-blue-200 text-xs mt-1">${msg.time || "الآن"}</p>
-          </div>
-        `;
-        messagesContainer.appendChild(messageElement);
-      });
+      messagesContainer.innerHTML = `
+      <div class="dialogue-container bg-white/5 rounded-lg p-4 max-h-80 overflow-y-auto">
+        <div class="space-y-3" id="dialogueMessagesList">
+          ${(question.messages || [])
+            .map(
+              (msg, index) => `
+            <div class="flex ${
+              msg.sender === "user" ? "justify-end" : "justify-start"
+            }">
+              <div class="max-w-xs rounded-2xl p-3 ${
+                msg.sender === "user"
+                  ? "bg-blue-500 text-white rounded-br-none"
+                  : "bg-gray-300 text-gray-800 rounded-bl-none"
+              }">
+                <p class="text-sm">${msg.text}</p>
+                <p class="text-xs opacity-70 mt-1 text-right">${
+                  msg.time || ""
+                }</p>
+              </div>
+            </div>
+          `
+            )
+            .join("")}
+        </div>
+      </div>
+      
+      <div class="mt-4 bg-white/10 rounded-lg p-4">
+        <p class="text-white font-medium mb-3">اختر الرسائل المشبوهة:</p>
+        <div class="space-y-2" id="suspiciousOptions">
+          ${(question.messages || [])
+            .map(
+              (msg, index) => `
+            <label class="flex items-center gap-3 p-3 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors">
+              <input type="checkbox" name="suspiciousMessage" value="${index}" 
+                     class="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
+              <div class="flex-1">
+                <p class="text-white text-sm">${msg.text}</p>
+                <p class="text-blue-200 text-xs">${
+                  msg.sender === "user" ? "أنت" : "المرسل"
+                }</p>
+              </div>
+            </label>
+          `
+            )
+            .join("")}
+        </div>
+      </div>
+    `;
     }
 
     if (submitBtn) this.showElement("submitDialogueBtn");
   }
 
+  handleDialogueSubmission() {
+    const checkboxes = document.querySelectorAll(
+      'input[name="suspiciousMessage"]:checked'
+    );
+    const selectedMessages = Array.from(checkboxes).map((cb) =>
+      parseInt(cb.value)
+    );
+
+    // Simple scoring: if they selected any message, consider it correct for now
+    // You can enhance this with actual correct answers from your data
+    const isCorrect = selectedMessages.length > 0;
+
+    this.handleAnswer(isCorrect ? "phishing" : "safe");
+  }
   showImageQuestion(question) {
     this.showElement("imageQuestion");
     const imgElement = document.getElementById("questionImage");

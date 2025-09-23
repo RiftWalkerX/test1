@@ -1,26 +1,172 @@
-// dashboard.js (merged with training.js)
+// dashboard.js - Consolidated version with training and room invitation handling
 import { auth, db } from "./firebase-init.js";
 import { loadFriendRequests, sendFriendRequest } from "./friends.js";
 import { loadRoomInvites, setupRoomInviteListener } from "./room-invites.js";
 import { checkDailyStreak } from "./streak.js";
 import { loadProfileData } from "./profile.js";
-import { startTutorial, endTutorial } from "./tutorial.js";
+import { startTutorial, endTutorial, isTutorialActive } from "./tutorial.js";
+import { showLobbyModal } from "./room-system.js";
 import {
   doc,
   updateDoc,
   getDoc,
   arrayUnion,
+  setDoc,
+  serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// small toast helper (dispatches event handled by dashboard.js)
+// Toast notification system
 function showToast(message, type = "info") {
-  document.dispatchEvent(
-    new CustomEvent("showToast", { detail: { message, type } })
-  );
+  const toast = document.createElement("div");
+  toast.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform translate-x-full transition-transform duration-300`;
+
+  const bgColor =
+    {
+      warning: "bg-yellow-500",
+      success: "bg-green-500",
+      error: "bg-red-500",
+      info: "bg-blue-500",
+    }[type] || "bg-blue-500";
+
+  toast.classList.add(bgColor, "text-white");
+
+  toast.innerHTML = `
+    <div class="flex items-center gap-3">
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+      </svg>
+      <span class="text-sm font-medium">${message}</span>
+    </div>
+  `;
+
+  document.body.appendChild(toast);
+
+  // Animate in
+  setTimeout(() => toast.classList.remove("translate-x-full"), 100);
+
+  // Animate out and remove
+  setTimeout(() => {
+    toast.classList.add("translate-x-full");
+    setTimeout(
+      () => document.body.contains(toast) && document.body.removeChild(toast),
+      300
+    );
+  }, 3000);
 }
 
-// --- Handle level click: show modal with level info and start/cancel buttons ---
-export async function handleLevelClick(level) {
+// Event listener for toast notifications
+document.addEventListener("showToast", (e) =>
+  showToast(e.detail.message, e.detail.type)
+);
+
+// Modal utilities
+function showModal(modal) {
+  if (!modal) return;
+  modal.classList.remove("opacity-0", "pointer-events-none");
+  const content = modal.querySelector(".bg-white\\/10");
+  if (content) {
+    content.classList.remove("scale-95");
+    content.classList.add("scale-100");
+  }
+}
+
+function hideModal(modal) {
+  if (!modal) return;
+  modal.classList.add("opacity-0", "pointer-events-none");
+  const content = modal.querySelector(".bg-white\\/10");
+  if (content) {
+    content.classList.add("scale-95");
+    content.classList.remove("scale-100");
+  }
+}
+
+// Update profile images & display name using auth.currentUser (falls back to img.svg)
+function updateProfileImages() {
+  const user = auth.currentUser;
+  const profileImg = document.getElementById("userProfileImage");
+  const profileImgCard = document.getElementById("userProfileImageCard");
+  const displayNameEl = document.getElementById("userDisplayName");
+
+  const photoUrl = user?.photoURL || null;
+  const displayName = user?.displayName || "";
+
+  if (profileImg) {
+    profileImg.src = photoUrl || "img.svg";
+    profileImg.onerror = () => (profileImg.src = "img.svg");
+  }
+  if (profileImgCard) {
+    profileImgCard.src = photoUrl || "img.svg";
+    profileImgCard.onerror = () => (profileImgCard.src = "img.svg");
+  }
+  if (displayNameEl) displayNameEl.textContent = displayName;
+}
+
+// Handle room invitations from URL parameters
+async function joinRoomFromInvitation(roomId) {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      showToast("يجب تسجيل الدخول أولاً", "error");
+      return;
+    }
+
+    // Check if room exists and is waiting
+    const roomRef = doc(db, "rooms", roomId);
+    const roomDoc = await getDoc(roomRef);
+
+    if (!roomDoc.exists()) {
+      showToast("الغرفة لم تعد موجودة", "error");
+      return;
+    }
+
+    const roomData = roomDoc.data();
+
+    if (roomData.status !== "waiting") {
+      showToast("الغرفة لم تعد في حالة انتظار", "error");
+      return;
+    }
+
+    // Check if user is already in the room
+    const existingPlayer = roomData.players.find((p) => p.uid === user.uid);
+    if (!existingPlayer) {
+      // Add user to room if not already there
+      const playerData = {
+        uid: user.uid,
+        displayName: user.displayName || "لاعب",
+        isHost: false,
+        isReady: false,
+        score: 0,
+        joinedAt: new Date().toISOString(),
+      };
+
+      await updateDoc(roomRef, {
+        players: arrayUnion(playerData),
+      });
+
+      // Add to players subcollection
+      await setDoc(doc(db, `rooms/${roomId}/players`, user.uid), {
+        ...playerData,
+        joinedAt: serverTimestamp(),
+      });
+    }
+
+    // Show lobby modal instead of going directly to room
+    showLobbyModal(roomId, false);
+
+    // Remove the parameter from URL
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    showToast("تم الانضمام إلى الغرفة بنجاح!", "success");
+  } catch (error) {
+    console.error("Error joining room from invitation:", error);
+    showToast("فشل في الانضمام إلى الغرفة: " + error.message, "error");
+  }
+}
+
+// --- Training Level Functions ---
+
+// Handle level click: show modal with level info and start/cancel buttons
+async function handleLevelClick(level) {
   const user = auth.currentUser;
   if (!user) {
     showToast("الرجاء تسجيل الدخول للمتابعة.", "warning");
@@ -57,9 +203,7 @@ export async function handleLevelClick(level) {
       // ensure we remove previous handler to avoid stacking handlers
       startLevelBtn.replaceWith(startLevelBtn.cloneNode(true));
       const newStartBtn = document.getElementById("startLevelBtn");
-      newStartBtn.addEventListener("click", () =>
-        window.startTrainingLevel(level)
-      );
+      newStartBtn.addEventListener("click", () => startTrainingLevel(level));
     }
 
     // show modal
@@ -74,8 +218,8 @@ export async function handleLevelClick(level) {
   }
 }
 
-// --- Get Level Data (now supports 1..20) ---
-export function getLevelData(level, completedLevels = []) {
+// Get Level Data (supports 1..20)
+function getLevelData(level, completedLevels = []) {
   // base known data for first levels
   const base = {
     1: {
@@ -135,8 +279,8 @@ export function getLevelData(level, completedLevels = []) {
   return data;
 }
 
-// --- Start Level (redirect to training page, only if unlocked) ---
-window.startTrainingLevel = async function (level) {
+// Start Level (redirect to training page, only if unlocked)
+async function startTrainingLevel(level) {
   const user = auth.currentUser;
   if (!user) {
     showToast("الرجاء تسجيل الدخول للمتابعة.", "warning");
@@ -159,10 +303,10 @@ window.startTrainingLevel = async function (level) {
   } catch (error) {
     showToast("فشل في بدء المستوى: " + error.message, "error");
   }
-};
+}
 
-// --- Complete a training level (unchanged) ---
-export const completeTrainingLevel = async function (level, score, timeSpent) {
+// Complete a training level
+const completeTrainingLevel = async function (level, score, timeSpent) {
   const user = auth.currentUser;
   if (!user) return;
   try {
@@ -199,8 +343,8 @@ export const completeTrainingLevel = async function (level, score, timeSpent) {
   }
 };
 
-// --- Update Levels based on user progress (current level shows star SVG) ---
-export async function updateLevelsStatus(completedLevels = []) {
+// Update Levels based on user progress (current level shows star SVG)
+async function updateLevelsStatus(completedLevels = []) {
   const currentLevel =
     completedLevels.length > 0 ? Math.max(...completedLevels) + 1 : 1;
 
@@ -298,58 +442,14 @@ export async function updateLevelsStatus(completedLevels = []) {
   }
 }
 
-// --- Modal helpers (internal) ---
-function showModal(modal) {
-  if (!modal) return;
-  modal.classList.remove("opacity-0", "pointer-events-none");
-  const modalContent = modal.querySelector(".bg-white\\/10");
-  if (modalContent) {
-    modalContent.classList.remove("scale-95");
-    modalContent.classList.add("scale-100");
-  }
-}
+// --- Dashboard Initialization ---
 
-function hideModal(modal) {
-  if (!modal) return;
-  modal.classList.add("opacity-0", "pointer-events-none");
-  const modalContent = modal.querySelector(".bg-white\\/10");
-  if (modalContent) {
-    modalContent.classList.add("scale-95");
-    modalContent.classList.remove("scale-100");
-  }
-}
-
-// --- Dashboard.js Functions ---
-
-// Update profile images & display name using auth.currentUser (falls back to img.svg)
-function updateProfileImages() {
-  const user = auth.currentUser;
-  const profileImg = document.getElementById("userProfileImage");
-  const profileImgCard = document.getElementById("userProfileImageCard");
-  const displayNameEl = document.getElementById("userDisplayName");
-
-  const photoUrl = user?.photoURL || null;
-  const displayName = user?.displayName || "";
-
-  if (profileImg) {
-    profileImg.src = photoUrl || "img.svg";
-    profileImg.onerror = () => (profileImg.src = "img.svg");
-  }
-  if (profileImgCard) {
-    profileImgCard.src = photoUrl || "img.svg";
-    profileImgCard.onerror = () => (profileImgCard.src = "img.svg");
-  }
-  if (displayNameEl) displayNameEl.textContent = displayName;
-}
-
-// Dashboard initialization and event listeners
 document.addEventListener("DOMContentLoaded", async function () {
   // If already signed in, load profile & update images immediately
   if (auth.currentUser) {
     try {
       await loadProfileData();
     } catch (e) {
-      // ignore if loadProfileData not ready
       console.warn("loadProfileData error:", e);
     }
     updateProfileImages();
@@ -369,6 +469,17 @@ document.addEventListener("DOMContentLoaded", async function () {
     loadRoomInvites();
     setupRoomInviteListener();
     checkDailyStreak(user.uid);
+
+    // Handle room invitations from URL parameters after auth is ready
+    const urlParams = new URLSearchParams(window.location.search);
+    const joinRoomId = urlParams.get("joinRoom");
+
+    if (joinRoomId) {
+      // Wait a bit for the page to load completely
+      setTimeout(() => {
+        joinRoomFromInvitation(joinRoomId);
+      }, 1500);
+    }
   });
 
   // Set up UI event listeners
@@ -473,16 +584,16 @@ function setupTrainingGuideModal() {
 
   startTutorialBtn?.addEventListener("click", () => {
     hideModal(trainingGuideModal);
-    startTutorial(); // This should now work properly
+    startTutorial();
   });
 }
 
 function setupJoinRoomModal() {
-  const joinRoomBtn = document.getElementById("openJoinRoomModalBtn");
+  const joinRoomBtn = document.getElementById("joinRoomBtn");
   const joinRoomModal = document.getElementById("joinRoomModal");
-  const closeBtn = document.getElementById("closeJoinRoomModalBtn");
-  const joinBtn = document.getElementById("joinRoomBtn");
-  const input = document.getElementById("roomCodeInput");
+  const closeBtn = document.getElementById("closeJoinRoomBtn");
+  const joinBtn = document.getElementById("joinRoomConfirmBtn");
+  const input = document.getElementById("joinRoomIdInput");
 
   joinRoomBtn?.addEventListener("click", () => {
     showModal(joinRoomModal);
@@ -502,7 +613,9 @@ function setupJoinRoomModal() {
     }
 
     try {
-      window.location.href = `room.html?id=${roomCode}`;
+      // Use the room invitation functionality
+      await joinRoomFromInvitation(roomCode);
+      hideModal(joinRoomModal);
     } catch (e) {
       showToast("فشل في الانضمام إلى الغرفة", "error");
     }
@@ -515,14 +628,27 @@ function setupJoinRoomModal() {
   });
 }
 
-// Toast notification system - REMOVED DUPLICATE DECLARATION
-// The showToast function is already declared at the top of the file
-document.addEventListener("showToast", (e) =>
-  showToast(e.detail.message, e.detail.type)
-);
-
 // Image error fallback
 window.handleImageError = function (img) {
   img.src = "img.svg";
   img.onerror = null;
+};
+
+// Export functions for use in other modules
+window.joinRoomFromInvitation = joinRoomFromInvitation;
+window.showModal = showModal;
+window.hideModal = hideModal;
+window.showToast = showToast;
+window.startTrainingLevel = startTrainingLevel;
+window.completeTrainingLevel = completeTrainingLevel;
+
+// Export for training modules
+export {
+  handleLevelClick,
+  getLevelData,
+  completeTrainingLevel,
+  updateLevelsStatus,
+  showToast,
+  showModal,
+  hideModal,
 };
