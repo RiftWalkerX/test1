@@ -12,7 +12,7 @@ import {
   getDoc,
   arrayUnion,
   setDoc,
-  serverTimestamp
+  serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Toast notification system
@@ -20,12 +20,13 @@ function showToast(message, type = "info") {
   const toast = document.createElement("div");
   toast.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform translate-x-full transition-transform duration-300`;
 
-  const bgColor = {
-    warning: "bg-yellow-500",
-    success: "bg-green-500",
-    error: "bg-red-500",
-    info: "bg-blue-500",
-  }[type] || "bg-blue-500";
+  const bgColor =
+    {
+      warning: "bg-yellow-500",
+      success: "bg-green-500",
+      error: "bg-red-500",
+      info: "bg-blue-500",
+    }[type] || "bg-blue-500";
 
   toast.classList.add(bgColor, "text-white");
 
@@ -119,14 +120,14 @@ async function joinRoomFromInvitation(roomId) {
     }
 
     const roomData = roomDoc.data();
-    
+
     if (roomData.status !== "waiting") {
       showToast("الغرفة لم تعد في حالة انتظار", "error");
       return;
     }
 
     // Check if user is already in the room
-    const existingPlayer = roomData.players.find(p => p.uid === user.uid);
+    const existingPlayer = roomData.players.find((p) => p.uid === user.uid);
     if (!existingPlayer) {
       // Add user to room if not already there
       const playerData = {
@@ -139,24 +140,23 @@ async function joinRoomFromInvitation(roomId) {
       };
 
       await updateDoc(roomRef, {
-        players: arrayUnion(playerData)
+        players: arrayUnion(playerData),
       });
 
       // Add to players subcollection
       await setDoc(doc(db, `rooms/${roomId}/players`, user.uid), {
         ...playerData,
-        joinedAt: serverTimestamp()
+        joinedAt: serverTimestamp(),
       });
     }
 
     // Show lobby modal instead of going directly to room
     showLobbyModal(roomId, false);
-    
+
     // Remove the parameter from URL
     window.history.replaceState({}, document.title, window.location.pathname);
 
     showToast("تم الانضمام إلى الغرفة بنجاح!", "success");
-
   } catch (error) {
     console.error("Error joining room from invitation:", error);
     showToast("فشل في الانضمام إلى الغرفة: " + error.message, "error");
@@ -165,7 +165,7 @@ async function joinRoomFromInvitation(roomId) {
 
 // --- Training Level Functions ---
 
-// Handle level click: show modal with level info and start/cancel buttons
+// --- Handle level click: show modal with level info and start/cancel buttons ---
 async function handleLevelClick(level) {
   const user = auth.currentUser;
   if (!user) {
@@ -179,9 +179,16 @@ async function handleLevelClick(level) {
     const completedLevels = userDoc.exists()
       ? userDoc.data().completedLevels || []
       : [];
+    
     const levelData = getLevelData(level, completedLevels);
     if (!levelData) {
       showToast("لا يوجد بيانات لهذا المستوى بعد.", "warning");
+      return;
+    }
+
+    // Check if level is locked - show toast instead of modal
+    if (levelData.status === "locked") {
+      showToast("يجب عليك إكمال المستوى السابق أولاً.", "warning");
       return;
     }
 
@@ -192,19 +199,54 @@ async function handleLevelClick(level) {
     const startLevelBtn = document.getElementById("startLevelBtn");
 
     if (modalIcon && modalTitle && modalDescription && startLevelBtn) {
-      // set classes & content
-      modalIcon.className = `w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${levelData.bgClass}`;
-      modalIcon.innerHTML = levelData.icon;
-      modalTitle.textContent = levelData.title;
-      modalDescription.textContent = levelData.description;
-      startLevelBtn.textContent =
-        levelData.status === "completed" ? "إعادة المستوى" : "بدء المستوى";
+      // Get the actual level node from the container
+      const levelNode = document.querySelector(`.level-node[data-level="${level}"]`);
+      const levelIconContainer = levelNode?.querySelector('.w-16.h-16');
+      const textContainer = levelNode?.querySelector('.text-center');
+      
+      // Sync the icon
+      if (levelIconContainer) {
+        modalIcon.innerHTML = levelIconContainer.innerHTML;
+        modalIcon.className = levelIconContainer.className + ' mx-auto';
+      } else {
+        modalIcon.className = `w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${levelData.bgClass}`;
+        modalIcon.innerHTML = levelData.icon;
+      }
+      
+      // Sync the title from HTML (h3 element)
+      const levelTitleEl = textContainer?.querySelector('h3');
+      if (levelTitleEl) {
+        modalTitle.textContent = levelTitleEl.textContent;
+      } else {
+        modalTitle.textContent = levelData.title;
+      }
+      
+      // Sync the description from HTML (first p element after h3)
+      const levelDescEl = textContainer?.querySelector('h3 + p');
+      if (levelDescEl && levelDescEl.textContent.trim()) {
+        modalDescription.textContent = levelDescEl.textContent;
+      } else {
+        modalDescription.textContent = levelData.description;
+      }
+      
+      // Get the status text from HTML (last p element)
+      const statusTextEl = textContainer?.querySelector('p:last-child');
+      let statusText = "بدء المستوى";
+      if (statusTextEl) {
+        if (statusTextEl.textContent.includes("مكتمل")) {
+          statusText = "إعادة المستوى";
+        } else if (statusTextEl.textContent.includes("متاح الآن")) {
+          statusText = "بدء المستوى";
+        }
+      }
+      
+      startLevelBtn.textContent = statusText;
 
       // ensure we remove previous handler to avoid stacking handlers
       startLevelBtn.replaceWith(startLevelBtn.cloneNode(true));
       const newStartBtn = document.getElementById("startLevelBtn");
       newStartBtn.addEventListener("click", () =>
-        startTrainingLevel(level)
+        window.startTrainingLevel(level)
       );
     }
 
@@ -474,8 +516,8 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // Handle room invitations from URL parameters after auth is ready
     const urlParams = new URLSearchParams(window.location.search);
-    const joinRoomId = urlParams.get('joinRoom');
-    
+    const joinRoomId = urlParams.get("joinRoom");
+
     if (joinRoomId) {
       // Wait a bit for the page to load completely
       setTimeout(() => {
@@ -515,6 +557,10 @@ function setupUIEventListeners() {
   document.querySelectorAll(".level-node").forEach((node) => {
     node.addEventListener("click", () => {
       const level = parseInt(node.dataset.level);
+      if (node.classList.contains("locked")) {
+        showToast("يجب عليك إكمال المستوى السابق أولاً.", "warning");
+        return;
+      }
       handleLevelClick(level);
     });
   });
@@ -645,12 +691,12 @@ window.startTrainingLevel = startTrainingLevel;
 window.completeTrainingLevel = completeTrainingLevel;
 
 // Export for training modules
-export { 
-  handleLevelClick, 
-  getLevelData, 
-  completeTrainingLevel, 
+export {
+  handleLevelClick,
+  getLevelData,
+  completeTrainingLevel,
   updateLevelsStatus,
   showToast,
   showModal,
-  hideModal
+  hideModal,
 };
