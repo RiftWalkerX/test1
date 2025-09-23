@@ -77,9 +77,12 @@
             <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-6 border border-white/20">
                 <div class="flex items-center justify-between mb-4">
                     <h2 class="text-lg font-bold text-white">اللاعبون</h2>
-                    <div class="text-blue-200 text-sm" id="questionProgress">سؤال 1 من 10</div>
+                    <!-- Add Question Progress Display -->
+                    <div class="text-blue-200 text-sm">
+                        سؤال <span id="currentQuestion">1</span> من <span id="totalQuestions">10</span>
+                    </div>
                 </div>
-                <div id="playersStatus" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <div id="playersList" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                     <!-- Players will be populated here -->
                 </div>
             </div>
@@ -168,7 +171,7 @@
 
                     <!-- Answer Buttons -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8">
-                        <button class="answer-btn safe-btn bg-green-500/20 hover:bg-green-500/30 border-2 border-green-500/50 hover:border-green-500 text-white py-4 px-6 rounded-xl font-medium transition-all duration-200 min-touch-target" data-answer="safe">
+                        <button id="safeBtn" class="answer-btn safe-btn bg-green-500/20 hover:bg-green-500/30 border-2 border-green-500/50 hover:border-green-500 text-white py-4 px-6 rounded-xl font-medium transition-all duration-200 min-touch-target" data-answer="safe">
                             <div class="flex items-center justify-center gap-3">
                                 <svg class="w-6 h-6 text-green-400" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
@@ -176,7 +179,7 @@
                                 <span class="text-lg">آمنة</span>
                             </div>
                         </button>
-                        <button class="answer-btn phishing-btn bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500/50 hover:border-red-500 text-white py-4 px-6 rounded-xl font-medium transition-all duration-200 min-touch-target" data-answer="phishing">
+                        <button id="phishingBtn" class="answer-btn phishing-btn bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500/50 hover:border-red-500 text-white py-4 px-6 rounded-xl font-medium transition-all duration-200 min-touch-target" data-answer="phishing">
                             <div class="flex items-center justify-center gap-3">
                                 <svg class="w-6 h-6 text-red-400" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
@@ -187,7 +190,7 @@
                     </div>
 
                     <!-- Submit Dialogue Button -->
-                    <button id="submitDialogue" class="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-4 px-6 rounded-xl font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-200 min-touch-target hidden mt-4">
+                    <button id="submitDialogueBtn" class="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-4 px-6 rounded-xl font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-200 min-touch-target hidden mt-4">
                         تأكيد الإجابات
                     </button>
                 </div>
@@ -232,15 +235,11 @@
                     <div class="flex items-center gap-2">
                         <span class="text-white text-sm">مستوى الصعوبة:</span>
                         <div class="flex items-center gap-1" id="difficultyStars">
-                            <svg class="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                            </svg>
-                            <svg class="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                            </svg>
-                            <svg class="w-4 h-4 text-white/30" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                            </svg>
+                            <span class="difficulty-star text-yellow-400">★</span>
+                            <span class="difficulty-star text-yellow-400">★</span>
+                            <span class="difficulty-star text-gray-400">★</span>
+                            <span class="difficulty-star text-gray-400">★</span>
+                            <span class="difficulty-star text-gray-400">★</span>
                         </div>
                         <span class="text-blue-200 text-sm">متوسط</span>
                     </div>
@@ -250,14 +249,14 @@
     </main>
 
     <!-- Game Over Modal -->
-    <div id="gameOverModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 opacity-0 pointer-events-none transition-all duration-300 z-50">
-        <div class="bg-white rounded-2xl p-8 max-w-2xl w-full transform scale-95 transition-transform duration-300">
+    <div id="gameOverModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-2xl p-8 max-w-2xl w-full">
             <div class="text-center">
                 <div class="w-20 h-20 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-4">
                     <span class="text-white text-3xl">🏆</span>
                 </div>
-                <h3 class="text-2xl font-bold text-gray-900 mb-2" id="gameOverTitle">انتهت الجولة!</h3>
-                <p class="text-gray-600 mb-6" id="gameOverMessage">تهانينا! لقد أكملت جلسة التدريب الجماعي</p>
+                <h3 class="text-2xl font-bold text-gray-900 mb-2">انتهت الجولة!</h3>
+                <p class="text-gray-600 mb-6">تهانينا! لقد أكملت جلسة التدريب الجماعي</p>
                 
                 <div class="bg-gray-50 rounded-xl p-6 mb-6">
                     <h4 class="font-semibold text-gray-900 mb-4">النتائج النهائية</h4>
@@ -270,7 +269,7 @@
                     <button id="playAgainBtn" class="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-200">
                         لعب مرة أخرى
                     </button>
-                    <button id="backToDashboard" class="w-full bg-gray-100 text-gray-700 py-3 px-6 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200">
+                    <button id="closeModalBtn" class="w-full bg-gray-100 text-gray-700 py-3 px-6 rounded-lg font-medium hover:bg-gray-200 transition-all duration-200">
                         العودة للوحة التحكم
                     </button>
                 </div>
@@ -287,56 +286,18 @@
                 </svg>
             </div>
             <h3 class="text-xl font-bold text-white mb-2">جاري تحميل الغرفة...</h3>
-            <p class="text-blue-200" id="loadingMessage">يرجى الانتظار</p>
+            <p class="text-blue-200">يرجى الانتظار</p>
         </div>
     </div>
-    <!-- Add these sections to your room.html -->
 
-<!-- SMS Question Type -->
-<div id="smsQuestion" class="hidden">
-  <div class="bg-white/5 rounded-xl p-6 mb-6">
-    <div class="flex items-center gap-3 mb-4">
-      <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-        <span class="text-white font-bold">?</span>
-      </div>
-      <div>
-        <p id="smsSender" class="text-white font-medium">جهة مجهولة</p>
-        <p id="smsTimestamp" class="text-blue-200 text-sm">الآن</p>
-      </div>
-    </div>
-    <p id="smsContent" class="text-white text-lg leading-relaxed"></p>
-  </div>
-</div>
-
-<!-- Dialogue Question Type -->
-<div id="dialogueQuestion" class="hidden">
-  <div class="bg-white/5 rounded-xl p-6 mb-6 max-h-80 overflow-y-auto">
-    <div id="dialogueMessages" class="space-y-4">
-      <!-- Dialogue messages will be populated here -->
-    </div>
-  </div>
-  <div class="flex gap-4">
-    <input type="text" id="dialogueInput" placeholder="اكتب ردك هنا..." class="flex-1 bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-blue-200">
-    <button id="submitDialogue" class="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-lg font-medium hover:from-green-600 hover:to-emerald-700 transition-all duration-200">
-      إرسال
-    </button>
-  </div>
-</div>
-
-<!-- Image Question Type -->
-<div id="imageQuestion" class="hidden">
-  <div class="bg-white/5 rounded-xl p-6 mb-6">
-    <img id="questionImage" src="" alt="" class="w-full h-64 object-cover rounded-lg mb-4">
-    <p id="imageDescription" class="text-white text-lg text-center"></p>
-  </div>
-</div>
-<script>
-console.log("Room page loaded");
-console.log("URL parameters:", new URLSearchParams(window.location.search).toString());
-console.log("Current user:", auth?.currentUser);
-</script>
-<!-- Add this line BEFORE your room-game.js script -->
-<script type="module" src="firebase-init.js"></script>
-<script type="module" src="room-game.js"></script>
+    <script>
+        console.log("Room page loaded");
+        console.log("URL parameters:", new URLSearchParams(window.location.search).toString());
+    </script>
+    
+    <!-- Load Firebase first -->
+    <script type="module" src="firebase-init.js"></script>
+    <!-- Then load your room game script -->
+    <script type="module" src="room-game.js"></script>
 </body>
 </html>
