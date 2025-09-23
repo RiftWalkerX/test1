@@ -51,8 +51,93 @@ class RoomGame {
       return;
     }
 
+    // Define setupEventListeners first, then call it
+    this.setupEventListeners = this.setupEventListeners.bind(this);
     this.setupEventListeners();
+
     await this.loadRoomData();
+  }
+
+  // Add this method to the RoomGame class (around line 50-60)
+  setupEventListeners() {
+    console.log("Setting up event listeners...");
+
+    // Add answer button event listeners
+    const phishingBtn = document.getElementById("phishingBtn");
+    const safeBtn = document.getElementById("safeBtn");
+    const submitDialogueBtn = document.getElementById("submitDialogue");
+
+    if (phishingBtn) {
+      phishingBtn.addEventListener("click", () =>
+        this.handleAnswer("phishing")
+      );
+    }
+
+    if (safeBtn) {
+      safeBtn.addEventListener("click", () => this.handleAnswer("safe"));
+    }
+
+    if (submitDialogueBtn) {
+      submitDialogueBtn.addEventListener("click", () =>
+        this.handleDialogueSubmission()
+      );
+    }
+
+    // Add game over modal close listener
+    const closeModalBtn = document.getElementById("closeModalBtn");
+    if (closeModalBtn) {
+      closeModalBtn.addEventListener("click", () => {
+        window.location.href = "dashboard.html";
+      });
+    }
+  }
+
+  // Also add this method for dialogue questions
+  handleDialogueSubmission() {
+    // For now, use a simple approach - you can enhance this later
+    const dialogueAnswer = "phishing"; // Default answer, you can make this dynamic
+    this.handleAnswer(dialogueAnswer);
+  }
+
+  // Add this method to the RoomGame class (around line 50-60)
+  setupEventListeners() {
+    console.log("Setting up event listeners...");
+
+    // Add answer button event listeners
+    const phishingBtn = document.getElementById("phishingBtn");
+    const safeBtn = document.getElementById("safeBtn");
+    const submitDialogueBtn = document.getElementById("submitDialogue");
+
+    if (phishingBtn) {
+      phishingBtn.addEventListener("click", () =>
+        this.handleAnswer("phishing")
+      );
+    }
+
+    if (safeBtn) {
+      safeBtn.addEventListener("click", () => this.handleAnswer("safe"));
+    }
+
+    if (submitDialogueBtn) {
+      submitDialogueBtn.addEventListener("click", () =>
+        this.handleDialogueSubmission()
+      );
+    }
+
+    // Add game over modal close listener
+    const closeModalBtn = document.getElementById("closeModalBtn");
+    if (closeModalBtn) {
+      closeModalBtn.addEventListener("click", () => {
+        window.location.href = "dashboard.html";
+      });
+    }
+  }
+
+  // Also add this method for dialogue questions
+  handleDialogueSubmission() {
+    // For now, use a simple approach - you can enhance this later
+    const dialogueAnswer = "phishing"; // Default answer, you can make this dynamic
+    this.handleAnswer(dialogueAnswer);
   }
 
   async loadRoomData() {

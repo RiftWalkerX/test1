@@ -335,9 +335,8 @@ console.log("Room page loaded");
 console.log("URL parameters:", new URLSearchParams(window.location.search).toString());
 console.log("Current user:", auth?.currentUser);
 </script>
-        <script type="module" src="room-game.js"></script>
-            <script type="module" src="firebase-init.js"></script>
-
-
+<!-- Add this line BEFORE your room-game.js script -->
+<script type="module" src="firebase-init.js"></script>
+<script type="module" src="room-game.js"></script>
 </body>
 </html>
