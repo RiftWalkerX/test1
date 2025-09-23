@@ -618,32 +618,38 @@ async function handleAnswer(answer, question) {
   gameState.hasAnswered = true;
   clearInterval(gameState.timerInterval);
 
-  // Disable answer buttons
+  // Disable answer buttons immediately
   safeBtn.disabled = true;
   phishingBtn.disabled = true;
   submitDialogueBtn.disabled = true;
 
-  // Calculate if answer is correct
-  const isCorrect = answer === question.correctAnswer;
+  try {
+    // Calculate if answer is correct
+    const isCorrect = answer === question.correctAnswer;
 
-  // Update player score
-  if (isCorrect) {
-    gameState.score += 50;
+    // Update player score
+    if (isCorrect) {
+      gameState.score += 50;
 
-    // Update streak
-    const currentStreak = parseInt(currentStreakElement.textContent) || 0;
-    currentStreakElement.textContent = currentStreak + 1;
+      // Update streak
+      const currentStreak = parseInt(currentStreakElement.textContent) || 0;
+      currentStreakElement.textContent = currentStreak + 1;
 
-    // Update points
-    const currentPoints = parseInt(userPointsElement.textContent) || 0;
-    userPointsElement.textContent = currentPoints + 50;
+      // Update points
+      const currentPoints = parseInt(userPointsElement.textContent) || 0;
+      userPointsElement.textContent = currentPoints + 50;
+    }
+
+    // Save answer to Firestore
+    await saveAnswer(answer, isCorrect);
+
+    // Show waiting state for other players
+    showWaitingState("بانتظار إجابات اللاعبين الآخرين...");
+  } catch (error) {
+    console.error("Error handling answer:", error);
+    // Even if saving fails, continue to waiting state
+    showWaitingState("بانتظار إجابات اللاعبين الآخرين...");
   }
-
-  // Save answer to Firestore
-  await saveAnswer(answer, isCorrect);
-
-  // Show waiting state for other players
-  showWaitingState("بانتظار إجابات اللاعبين الآخرين...");
 }
 
 async function handleDialogueAnswer(question) {
@@ -652,28 +658,33 @@ async function handleDialogueAnswer(question) {
   gameState.hasAnswered = true;
   clearInterval(gameState.timerInterval);
 
-  // For dialogue questions, we need to check each message
-  // This is a simplified version - you might want to implement a more complex checking mechanism
-  const isCorrect = Math.random() > 0.5; // Placeholder logic
+  try {
+    // For dialogue questions, we need to check each message
+    // This is a simplified version - you might want to implement a more complex checking mechanism
+    const isCorrect = Math.random() > 0.5; // Placeholder logic
 
-  // Update player score
-  if (isCorrect) {
-    gameState.score += 50;
+    // Update player score
+    if (isCorrect) {
+      gameState.score += 50;
 
-    // Update streak
-    const currentStreak = parseInt(currentStreakElement.textContent) || 0;
-    currentStreakElement.textContent = currentStreak + 1;
+      // Update streak
+      const currentStreak = parseInt(currentStreakElement.textContent) || 0;
+      currentStreakElement.textContent = currentStreak + 1;
 
-    // Update points
-    const currentPoints = parseInt(userPointsElement.textContent) || 0;
-    userPointsElement.textContent = currentPoints + 50;
+      // Update points
+      const currentPoints = parseInt(userPointsElement.textContent) || 0;
+      userPointsElement.textContent = currentPoints + 50;
+    }
+
+    // Save answer to Firestore
+    await saveAnswer("dialogue", isCorrect);
+
+    // Show waiting state for other players
+    showWaitingState("بانتظار إجابات اللاعبين الآخرين...");
+  } catch (error) {
+    console.error("Error handling dialogue answer:", error);
+    showWaitingState("بانتظار إجابات اللاعبين الآخرين...");
   }
-
-  // Save answer to Firestore
-  await saveAnswer("dialogue", isCorrect);
-
-  // Show waiting state for other players
-  showWaitingState("بانتظار إجابات اللاعبين الآخرين...");
 }
 
 async function saveAnswer(answer, isCorrect) {
@@ -686,18 +697,15 @@ async function saveAnswer(answer, isCorrect) {
       `${currentUser.uid}_${gameState.currentQuestion}`
     );
 
-    await updateDoc(
-      answerDoc,
-      {
-        userId: currentUser.uid,
-        userName: currentUser.displayName || "لاعب",
-        questionIndex: gameState.currentQuestion,
-        answer: answer,
-        isCorrect: isCorrect,
-        timestamp: serverTimestamp(),
-      },
-      { merge: true }
-    );
+    // Use setDoc instead of updateDoc to create the document if it doesn't exist
+    await setDoc(answerDoc, {
+      userId: currentUser.uid,
+      userName: currentUser.displayName || "لاعب",
+      questionIndex: gameState.currentQuestion,
+      answer: answer,
+      isCorrect: isCorrect,
+      timestamp: serverTimestamp(),
+    });
 
     // Also update the player's score in the room
     const roomRef = doc(db, "rooms", currentRoomId);
