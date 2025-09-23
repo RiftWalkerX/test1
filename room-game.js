@@ -1,4 +1,4 @@
-// room-game.js - Reliable version with comprehensive error handling
+// room-game.js - Fixed version with better room ID validation
 import { auth, db } from "./firebase-init.js";
 import {
   doc,
@@ -29,7 +29,6 @@ class RoomGame {
     this.isInitialized = false;
     this.isGameActive = false;
 
-    // Error tracking
     this.errorCount = 0;
     this.maxErrorCount = 5;
 
@@ -40,15 +39,23 @@ class RoomGame {
     try {
       console.log("🚀 Initializing RoomGame...");
 
-      // Validate authentication first
+      // Wait for auth to be ready
       if (!auth.currentUser) {
-        this.showError("يجب تسجيل الدخول أولاً", true);
-        return;
+        await new Promise((resolve, reject) => {
+          const unsubscribe = auth.onAuthStateChanged((user) => {
+            unsubscribe();
+            if (user) {
+              resolve(user);
+            } else {
+              reject(new Error("No authenticated user"));
+            }
+          });
+        });
       }
 
       this.userId = auth.currentUser.uid;
 
-      // Get room ID from URL parameters
+      // Get room ID from URL parameters with better parsing
       const urlParams = new URLSearchParams(window.location.search);
       this.roomId = urlParams.get("roomId");
 
@@ -60,8 +67,8 @@ class RoomGame {
         return;
       }
 
-      // Validate room ID format (alphanumeric, 4-8 characters)
-      if (!/^[a-zA-Z0-9]{4,8}$/.test(this.roomId)) {
+      // FIXED: More flexible room ID validation
+      if (!this.isValidRoomId(this.roomId)) {
         this.showError("معرف الغرفة غير صالح", true);
         return;
       }
@@ -75,13 +82,31 @@ class RoomGame {
     }
   }
 
+  // FIXED: Better room ID validation
+  isValidRoomId(roomId) {
+    if (!roomId || typeof roomId !== "string") return false;
+
+    // Allow various room ID formats that Firestore supports
+    // Firestore IDs can be 1-1500 characters, alphanumeric + some special chars
+    if (roomId.length < 1 || roomId.length > 1500) return false;
+
+    // Basic safety check - prevent obviously malicious IDs
+    if (
+      roomId.includes("..") ||
+      roomId.includes("//") ||
+      roomId.includes("\\")
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
   setupEventListeners() {
     console.log("🔗 Setting up event listeners...");
 
-    // Remove any existing listeners first
     this.removeEventListeners();
 
-    // Answer button listeners with debouncing
     this.setupButtonWithDebounce("safeBtn", () => this.handleAnswer("safe"));
     this.setupButtonWithDebounce("phishingBtn", () =>
       this.handleAnswer("phishing")
@@ -90,7 +115,6 @@ class RoomGame {
       this.handleDialogueSubmission()
     );
 
-    // Game over modal buttons
     this.setupButtonWithDebounce("playAgainBtn", () => {
       window.location.href = `room.html?roomId=${this.roomId}`;
     });
@@ -99,13 +123,10 @@ class RoomGame {
       window.location.href = "dashboard.html";
     });
 
-    // Handle page visibility changes
     document.addEventListener(
       "visibilitychange",
       this.handleVisibilityChange.bind(this)
     );
-
-    // Handle beforeunload
     window.addEventListener("beforeunload", this.handleBeforeUnload.bind(this));
   }
 
@@ -139,7 +160,6 @@ class RoomGame {
   }
 
   removeEventListeners() {
-    // Clean up any existing listeners if reinitializing
     const buttons = [
       "safeBtn",
       "phishingBtn",
@@ -150,18 +170,20 @@ class RoomGame {
     buttons.forEach((btnId) => {
       const btn = document.getElementById(btnId);
       if (btn) {
-        btn.replaceWith(btn.cloneNode(true));
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
       }
     });
   }
 
   async loadRoomData() {
+    let roomDoc;
     try {
       console.log("📥 Loading room data for room:", this.roomId);
       this.showLoading("جاري تحميل بيانات الغرفة...");
 
       const roomRef = doc(db, "rooms", this.roomId);
-      const roomDoc = await this.withRetry(() => getDoc(roomRef), 3);
+      roomDoc = await this.withRetry(() => getDoc(roomRef), 3);
 
       if (!roomDoc.exists()) {
         this.showError("لم يتم العثور على الغرفة في قاعدة البيانات", true);
@@ -171,7 +193,7 @@ class RoomGame {
       this.roomData = roomDoc.data();
       console.log("✅ Room data loaded:", this.roomData);
 
-      // Validate room data
+      // FIXED: More flexible room data validation
       if (!this.validateRoomData(this.roomData)) {
         this.showError("بيانات الغرفة غير صالحة", true);
         return;
@@ -181,27 +203,19 @@ class RoomGame {
       this.totalQuestions = Math.max(
         1,
         Math.min(this.roomData.questionCount || 10, 20)
-      ); // Limit 1-20 questions
+      );
       this.isHost = this.roomData.hostId === this.userId;
 
       // Check if user is in the room
       if (!(await this.isUserInRoom())) {
-        this.showError("أنت لست عضوًا في هذه الغرفة", true);
-        return;
+        await this.addUserToRoom();
       }
 
-      // Update UI with room info
       this.updateRoomInfo();
-
-      // Setup real-time listeners
       this.setupRealtimeListeners();
-
-      // Load questions
       await this.loadQuestions();
-
       this.hideLoading();
 
-      // Handle game state
       if (this.roomData.status === "started") {
         await this.startGame();
       } else {
@@ -209,12 +223,27 @@ class RoomGame {
       }
     } catch (error) {
       console.error("❌ Error loading room data:", error);
-      this.showError("فشل تحميل بيانات الغرفة: " + error.message, true);
+
+      // FIXED: Better error messages based on the actual error
+      if (error.code === "permission-denied") {
+        this.showError("ليس لديك صلاحية الوصول إلى هذه الغرفة", true);
+      } else if (error.code === "not-found") {
+        this.showError("الغرفة غير موجودة أو تم حذفها", true);
+      } else {
+        this.showError("فشل تحميل بيانات الغرفة: " + error.message, true);
+      }
     }
   }
 
+  // FIXED: More flexible room data validation
   validateRoomData(roomData) {
-    const requiredFields = ["roomName", "hostId", "status", "createdAt"];
+    if (!roomData || typeof roomData !== "object") {
+      console.error("Room data is not an object");
+      return false;
+    }
+
+    // Check essential fields with flexibility
+    const requiredFields = ["roomName", "hostId", "status"];
     for (const field of requiredFields) {
       if (!roomData[field]) {
         console.error(`Missing required field: ${field}`);
@@ -241,12 +270,43 @@ class RoomGame {
     }
   }
 
+  async addUserToRoom() {
+    try {
+      console.log("👤 Adding user to room...");
+      const playerRef = doc(db, `rooms/${this.roomId}/players`, this.userId);
+
+      // Get user profile
+      const userDoc = await getDoc(doc(db, "users", this.userId));
+      const userData = userDoc.exists() ? userDoc.data() : {};
+
+      await updateDoc(
+        playerRef,
+        {
+          displayName:
+            userData.displayName ||
+            auth.currentUser.displayName ||
+            "مستخدم مجهول",
+          email: auth.currentUser.email,
+          isHost: this.isHost,
+          score: 0,
+          joinedAt: serverTimestamp(),
+          isReady: false,
+        },
+        { merge: true }
+      );
+
+      console.log("✅ User added to room");
+    } catch (error) {
+      console.error("Error adding user to room:", error);
+      throw error;
+    }
+  }
+
   setupRealtimeListeners() {
-    // Clean up existing listeners
     if (this.roomListener) this.roomListener();
     if (this.playersListener) this.playersListener();
 
-    // Listen to room changes
+    // Room listener
     this.roomListener = onSnapshot(
       doc(db, "rooms", this.roomId),
       (doc) => {
@@ -254,6 +314,9 @@ class RoomGame {
           const newData = doc.data();
           console.log("🔄 Room updated:", newData);
           this.handleRoomUpdate(newData);
+        } else {
+          console.error("Room document doesn't exist anymore");
+          this.showError("تم حذف الغرفة", true);
         }
       },
       (error) => {
@@ -262,7 +325,7 @@ class RoomGame {
       }
     );
 
-    // Listen to players changes
+    // Players listener
     this.playersListener = onSnapshot(
       collection(db, `rooms/${this.roomId}/players`),
       (snapshot) => {
@@ -297,10 +360,8 @@ class RoomGame {
       console.log("📚 Loading questions...");
       this.showLoading("جاري تحميل الأسئلة...");
 
-      // Try GitHub first, then fallback
       await this.loadQuestionsFromGitHub();
 
-      // Validate we have enough questions
       if (this.questions.length < this.totalQuestions) {
         console.warn(
           `Only got ${this.questions.length} questions, need ${this.totalQuestions}. Using fallback.`
@@ -330,26 +391,36 @@ class RoomGame {
         fetch(endpoints.image, { timeout: 10000 }),
       ]);
 
-      const [smsResult, dialogueResult, imageResult] = responses;
       const questions = [];
 
-      // Process each response
-      if (smsResult.status === "fulfilled" && smsResult.value.ok) {
-        const smsData = await smsResult.value.json();
-        questions.push(...this.transformSMSQuestions(smsData));
+      responses.forEach((result, index) => {
+        if (result.status === "fulfilled" && result.value.ok) {
+          // Process response later
+        } else {
+          console.warn(
+            `Failed to fetch from endpoint ${Object.keys(endpoints)[index]}`
+          );
+        }
+      });
+
+      // Process successful responses
+      for (let i = 0; i < responses.length; i++) {
+        if (responses[i].status === "fulfilled" && responses[i].value.ok) {
+          const data = await responses[i].value.json();
+          switch (i) {
+            case 0:
+              questions.push(...this.transformSMSQuestions(data));
+              break;
+            case 1:
+              questions.push(...this.transformDialogueQuestions(data));
+              break;
+            case 2:
+              questions.push(...this.transformImageQuestions(data));
+              break;
+          }
+        }
       }
 
-      if (dialogueResult.status === "fulfilled" && dialogueResult.value.ok) {
-        const dialogueData = await dialogueResult.value.json();
-        questions.push(...this.transformDialogueQuestions(dialogueData));
-      }
-
-      if (imageResult.status === "fulfilled" && imageResult.value.ok) {
-        const imageData = await imageResult.value.json();
-        questions.push(...this.transformImageQuestions(imageData));
-      }
-
-      // Filter and shuffle questions based on quiz type
       this.questions = this.filterAndShuffleQuestions(questions);
     } catch (error) {
       throw new Error(`GitHub load failed: ${error.message}`);
@@ -393,13 +464,11 @@ class RoomGame {
   }
 
   filterAndShuffleQuestions(allQuestions) {
-    // Filter by quiz type
     let filteredQuestions = allQuestions;
     if (this.quizType !== "mixed") {
       filteredQuestions = allQuestions.filter((q) => q.type === this.quizType);
     }
 
-    // Shuffle and take exact count needed
     const shuffled = this.shuffleArray([...filteredQuestions]);
     return shuffled.slice(0, this.totalQuestions);
   }
@@ -423,22 +492,21 @@ class RoomGame {
 
   handleRoomUpdate(newData) {
     try {
+      if (!newData) return;
+
       this.roomData = newData;
 
-      // Validate new data
       if (!this.validateRoomData(newData)) {
         console.error("Invalid room data received");
         return;
       }
 
-      // Handle game state changes
       if (newData.status === "started" && !this.isGameActive) {
         this.startGame();
       } else if (newData.status === "ended" && this.isGameActive) {
         this.endGame();
       }
 
-      // Handle question progression
       const newQuestionIndex = newData.currentQuestion || 0;
       if (newQuestionIndex !== this.currentQuestionIndex && this.isGameActive) {
         this.currentQuestionIndex = newQuestionIndex;
@@ -457,7 +525,6 @@ class RoomGame {
       this.isGameActive = true;
       this.currentQuestionIndex = this.roomData.currentQuestion || 0;
 
-      // Validate we have questions
       if (this.questions.length === 0) {
         await this.loadQuestions();
       }
@@ -472,7 +539,6 @@ class RoomGame {
   async loadQuestion() {
     if (!this.isGameActive) return;
 
-    // Validate question index
     if (this.currentQuestionIndex >= this.questions.length) {
       await this.endGame();
       return;
@@ -494,16 +560,13 @@ class RoomGame {
     );
 
     try {
-      // Hide all states
       this.hideElement("loadingState");
       this.hideElement("waitingState");
       this.hideElement("resultsState");
       this.showElement("questionContent");
 
-      // Hide all question types
       this.hideAllQuestionTypes();
 
-      // Show appropriate question type
       switch (question.type) {
         case "sms":
           this.showSMSQuestion(question);
@@ -623,7 +686,6 @@ class RoomGame {
 
       const isCorrect = answer === question.correctAnswer;
 
-      // Update score
       if (isCorrect) {
         this.userScore += 50;
         this.currentStreak++;
@@ -631,53 +693,38 @@ class RoomGame {
         this.currentStreak = 0;
       }
 
-      // Update Firestore
       await this.updatePlayerAnswer(answer, isCorrect);
-
-      // Show results
       this.showResults(isCorrect, question.explanation);
 
-      // Progress to next question after delay
       setTimeout(() => {
         this.nextQuestion();
       }, 1500);
     } catch (error) {
       console.error("Error handling answer:", error);
-      this.hasAnswered = false; // Allow retry
+      this.hasAnswered = false;
       this.showError("فشل حفظ الإجابة");
     }
   }
 
   async updatePlayerAnswer(answer, isCorrect) {
     try {
-      await runTransaction(db, async (transaction) => {
-        const playerRef = doc(db, `rooms/${this.roomId}/players`, this.userId);
-        const roomRef = doc(db, "rooms", this.roomId);
-
-        // Update player document
-        transaction.update(playerRef, {
-          score: this.userScore,
-          lastAnswer: serverTimestamp(),
-          [`answers.${this.currentQuestionIndex}`]: {
-            answer: answer,
-            correct: isCorrect,
-            timestamp: serverTimestamp(),
-          },
-        });
-
-        // Update room scores
-        transaction.update(roomRef, {
-          [`scores.${this.userId}`]: this.userScore,
-        });
+      const playerRef = doc(db, `rooms/${this.roomId}/players`, this.userId);
+      await updateDoc(playerRef, {
+        score: this.userScore,
+        lastAnswer: serverTimestamp(),
+        [`answers.${this.currentQuestionIndex}`]: {
+          answer: answer,
+          correct: isCorrect,
+          timestamp: serverTimestamp(),
+        },
       });
     } catch (error) {
-      console.error("Transaction failed:", error);
+      console.error("Error updating player answer:", error);
       throw error;
     }
   }
 
   handleDialogueSubmission() {
-    // Simplified dialogue handling - you might want to enhance this
     const checkboxes = document.querySelectorAll(
       'input[name="suspiciousMessage"]:checked'
     );
@@ -705,7 +752,6 @@ class RoomGame {
       if (element) element.textContent = content;
     });
 
-    // Update styling
     const resultTitle = document.getElementById("resultTitle");
     if (resultTitle) {
       resultTitle.className = `text-xl font-bold mb-2 ${
@@ -725,15 +771,11 @@ class RoomGame {
     }
 
     try {
-      // Update room's current question
       await updateDoc(doc(db, "rooms", this.roomId), {
         currentQuestion: this.currentQuestionIndex,
       });
-
-      // Note: loadQuestion will be triggered by the real-time listener
     } catch (error) {
       console.error("Error updating question:", error);
-      // Try to continue anyway
       this.loadQuestion();
     }
   }
@@ -745,7 +787,6 @@ class RoomGame {
     this.isGameActive = false;
 
     try {
-      // Update room status to ended
       await updateDoc(doc(db, "rooms", this.roomId), {
         status: "ended",
         endedAt: serverTimestamp(),
@@ -754,7 +795,7 @@ class RoomGame {
       this.showGameOverModal();
     } catch (error) {
       console.error("Error ending game:", error);
-      this.showGameOverModal(); // Show modal anyway
+      this.showGameOverModal();
     }
   }
 
@@ -767,7 +808,6 @@ class RoomGame {
       return;
     }
 
-    // Sort players by score
     const sortedPlayers = [...this.players].sort(
       (a, b) => (b.score || 0) - (a.score || 0)
     );
@@ -794,8 +834,6 @@ class RoomGame {
       .join("");
 
     modal.classList.remove("hidden");
-
-    // Clean up listeners
     this.cleanup();
   }
 
@@ -908,9 +946,15 @@ class RoomGame {
   showError(message, isFatal = false) {
     console.error("Error:", message);
 
+    // FIXED: Better error display that doesn't interfere with page flow
+    const existingError = document.querySelector(".error-message");
+    if (existingError) {
+      existingError.remove();
+    }
+
     const errorDiv = document.createElement("div");
     errorDiv.className =
-      "fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white p-4 rounded-lg z-50 max-w-md";
+      "error-message fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white p-4 rounded-lg z-50 max-w-md";
     errorDiv.innerHTML = `
       <div class="flex items-center gap-2">
         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -924,7 +968,7 @@ class RoomGame {
 
     setTimeout(() => {
       if (document.body.contains(errorDiv)) {
-        document.body.removeChild(errorDiv);
+        errorDiv.remove();
       }
       if (isFatal) {
         setTimeout(() => {
@@ -934,7 +978,6 @@ class RoomGame {
     }, 5000);
   }
 
-  // Retry utility
   async withRetry(operation, maxRetries = 3, delay = 1000) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -947,13 +990,11 @@ class RoomGame {
     }
   }
 
-  // Event handlers for page lifecycle
   handleVisibilityChange() {
     if (document.hidden) {
       console.log("Page hidden");
     } else {
       console.log("Page visible");
-      // Could add reconnection logic here
     }
   }
 
@@ -986,19 +1027,48 @@ class RoomGame {
   }
 }
 
-// Initialize the game when the page loads
+// FIXED: Better initialization with error handling
 document.addEventListener("DOMContentLoaded", () => {
   let gameInstance = null;
+  let initAttempts = 0;
+  const maxInitAttempts = 3;
 
-  auth.onAuthStateChanged((user) => {
-    if (!user) {
-      window.location.href = "newlogin.html";
+  function initializeGame() {
+    if (initAttempts >= maxInitAttempts) {
+      console.error("Max initialization attempts reached");
+      window.location.href = "dashboard.html";
       return;
     }
 
-    // Only create one instance
-    if (!gameInstance) {
-      gameInstance = new RoomGame();
-    }
-  });
+    initAttempts++;
+
+    auth.onAuthStateChanged(
+      (user) => {
+        if (!user) {
+          console.warn("User not authenticated, redirecting to login");
+          window.location.href = "newlogin.html";
+          return;
+        }
+
+        try {
+          if (!gameInstance) {
+            gameInstance = new RoomGame();
+          }
+        } catch (error) {
+          console.error("Failed to initialize game:", error);
+          if (initAttempts < maxInitAttempts) {
+            setTimeout(initializeGame, 1000 * initAttempts);
+          }
+        }
+      },
+      (error) => {
+        console.error("Auth state change error:", error);
+        if (initAttempts < maxInitAttempts) {
+          setTimeout(initializeGame, 1000 * initAttempts);
+        }
+      }
+    );
+  }
+
+  initializeGame();
 });
