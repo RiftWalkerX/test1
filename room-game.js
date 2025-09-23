@@ -1,4 +1,4 @@
-// room-game.js - Fixed version
+// room-game.js - Fixed version with proper question fetching and timing
 import { auth, db } from "./firebase-init.js";
 import {
   doc,
@@ -8,6 +8,7 @@ import {
   collection,
   getDocs,
   serverTimestamp,
+  arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 class RoomGame {
@@ -19,12 +20,13 @@ class RoomGame {
     this.totalQuestions = 10;
     this.userScore = 0;
     this.currentStreak = 0;
-    this.timer = 30;
+    this.timer = 5; // 5 seconds for answering
     this.timerInterval = null;
     this.hasAnswered = false;
     this.questions = [];
     this.players = [];
     this.quizType = "mixed";
+    this.isHost = false;
 
     this.init();
   }
@@ -39,7 +41,6 @@ class RoomGame {
 
     console.log("Room ID from URL:", this.roomId);
     console.log("User ID:", this.userId);
-    console.log("Full URL:", window.location.href);
 
     if (!this.roomId) {
       this.showError("معرف الغرفة غير موجود في الرابط");
@@ -51,30 +52,26 @@ class RoomGame {
       return;
     }
 
-    // Define setupEventListeners first, then call it
-    this.setupEventListeners = this.setupEventListeners.bind(this);
     this.setupEventListeners();
-
     await this.loadRoomData();
   }
 
-  // Add this method to the RoomGame class (around line 50-60)
   setupEventListeners() {
     console.log("Setting up event listeners...");
 
-    // Add answer button event listeners
-    const phishingBtn = document.getElementById("phishingBtn");
+    // Answer button listeners
     const safeBtn = document.getElementById("safeBtn");
-    const submitDialogueBtn = document.getElementById("submitDialogue");
+    const phishingBtn = document.getElementById("phishingBtn");
+    const submitDialogueBtn = document.getElementById("submitDialogueBtn");
+
+    if (safeBtn) {
+      safeBtn.addEventListener("click", () => this.handleAnswer("safe"));
+    }
 
     if (phishingBtn) {
       phishingBtn.addEventListener("click", () =>
         this.handleAnswer("phishing")
       );
-    }
-
-    if (safeBtn) {
-      safeBtn.addEventListener("click", () => this.handleAnswer("safe"));
     }
 
     if (submitDialogueBtn) {
@@ -83,61 +80,21 @@ class RoomGame {
       );
     }
 
-    // Add game over modal close listener
+    // Game over modal buttons
+    const playAgainBtn = document.getElementById("playAgainBtn");
     const closeModalBtn = document.getElementById("closeModalBtn");
+
+    if (playAgainBtn) {
+      playAgainBtn.addEventListener("click", () => {
+        window.location.href = `room.html?roomId=${this.roomId}`;
+      });
+    }
+
     if (closeModalBtn) {
       closeModalBtn.addEventListener("click", () => {
         window.location.href = "dashboard.html";
       });
     }
-  }
-
-  // Also add this method for dialogue questions
-  handleDialogueSubmission() {
-    // For now, use a simple approach - you can enhance this later
-    const dialogueAnswer = "phishing"; // Default answer, you can make this dynamic
-    this.handleAnswer(dialogueAnswer);
-  }
-
-  // Add this method to the RoomGame class (around line 50-60)
-  setupEventListeners() {
-    console.log("Setting up event listeners...");
-
-    // Add answer button event listeners
-    const phishingBtn = document.getElementById("phishingBtn");
-    const safeBtn = document.getElementById("safeBtn");
-    const submitDialogueBtn = document.getElementById("submitDialogue");
-
-    if (phishingBtn) {
-      phishingBtn.addEventListener("click", () =>
-        this.handleAnswer("phishing")
-      );
-    }
-
-    if (safeBtn) {
-      safeBtn.addEventListener("click", () => this.handleAnswer("safe"));
-    }
-
-    if (submitDialogueBtn) {
-      submitDialogueBtn.addEventListener("click", () =>
-        this.handleDialogueSubmission()
-      );
-    }
-
-    // Add game over modal close listener
-    const closeModalBtn = document.getElementById("closeModalBtn");
-    if (closeModalBtn) {
-      closeModalBtn.addEventListener("click", () => {
-        window.location.href = "dashboard.html";
-      });
-    }
-  }
-
-  // Also add this method for dialogue questions
-  handleDialogueSubmission() {
-    // For now, use a simple approach - you can enhance this later
-    const dialogueAnswer = "phishing"; // Default answer, you can make this dynamic
-    this.handleAnswer(dialogueAnswer);
   }
 
   async loadRoomData() {
@@ -157,6 +114,7 @@ class RoomGame {
 
       this.quizType = this.roomData.quizType || "mixed";
       this.totalQuestions = this.roomData.questionCount || 10;
+      this.isHost = this.roomData.hostId === this.userId;
 
       // Update UI with room info
       this.updateRoomInfo();
@@ -164,8 +122,8 @@ class RoomGame {
       // Setup real-time listeners
       this.setupRealtimeListeners();
 
-      // Load questions
-      await this.loadQuestions();
+      // Load questions from GitHub
+      await this.loadQuestionsFromGitHub();
 
       // Hide loading overlay
       this.hideLoading();
@@ -183,52 +141,58 @@ class RoomGame {
   }
 
   updateRoomInfo() {
-    // Update room title and code
     const roomTitle = document.getElementById("roomTitle");
     const roomCodeDisplay = document.getElementById("roomCodeDisplay");
+    const userPoints = document.getElementById("userPoints");
+    const currentStreak = document.getElementById("currentStreak");
 
-    if (roomTitle) {
-      roomTitle.textContent = this.roomData?.roomName || "غرفة التدريب";
+    if (roomTitle && this.roomData?.roomName) {
+      roomTitle.textContent = this.roomData.roomName;
     }
 
     if (roomCodeDisplay) {
       roomCodeDisplay.textContent = `رمز: ${this.roomId}`;
     }
 
-    // Update user points and streak
-    const userPoints = document.getElementById("userPoints");
-    const currentStreak = document.getElementById("currentStreak");
-
     if (userPoints) userPoints.textContent = this.userScore;
     if (currentStreak) currentStreak.textContent = this.currentStreak;
   }
 
   setupRealtimeListeners() {
-    // Listen to room changes
-    onSnapshot(doc(db, "rooms", this.roomId), (doc) => {
-      if (doc.exists()) {
-        const newData = doc.data();
-        console.log("Room updated:", newData);
-        this.handleRoomUpdate(newData);
+    // Listen to room changes with error handling
+    this.roomListener = onSnapshot(
+      doc(db, "rooms", this.roomId),
+      (doc) => {
+        if (doc.exists()) {
+          const newData = doc.data();
+          console.log("Room updated:", newData);
+          this.handleRoomUpdate(newData);
+        }
+      },
+      (error) => {
+        console.error("Error listening to room:", error);
       }
-    });
+    );
 
     // Listen to players changes
-    onSnapshot(collection(db, `rooms/${this.roomId}/players`), (snapshot) => {
-      this.players = snapshot.docs.map((doc) => doc.data());
-      console.log("Players updated:", this.players);
-      this.updatePlayersStatus();
-    });
+    this.playersListener = onSnapshot(
+      collection(db, `rooms/${this.roomId}/players`),
+      (snapshot) => {
+        this.players = snapshot.docs.map((doc) => doc.data());
+        console.log("Players updated:", this.players);
+        this.updatePlayersStatus();
+      },
+      (error) => {
+        console.error("Error listening to players:", error);
+      }
+    );
   }
 
   handleRoomUpdate(newData) {
     this.roomData = newData;
 
     // Handle game state changes
-    if (
-      newData.status === "started" &&
-      (!this.roomData.status || this.roomData.status !== "started")
-    ) {
+    if (newData.status === "started" && this.roomData.status !== "started") {
       this.startGame();
     } else if (newData.status === "ended") {
       this.endGame();
@@ -245,41 +209,126 @@ class RoomGame {
     this.updateRoomInfo();
   }
 
-  async loadQuestions() {
+  async loadQuestionsFromGitHub() {
     try {
-      console.log("Loading questions for room:", this.roomId);
+      console.log("Loading questions from GitHub...");
+      const now = Date.now();
 
-      // Try to load questions from the room's questions collection
-      const questionsRef = collection(db, `rooms/${this.roomId}/questions`);
-      const questionsSnapshot = await getDocs(questionsRef);
+      const [smsRes, dialogueRes, imageRes] = await Promise.all([
+        fetch(
+          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${now}`
+        ),
+        fetch(
+          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${now}`
+        ),
+        fetch(
+          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${now}`
+        ),
+      ]);
 
-      if (!questionsSnapshot.empty) {
-        // Load questions from the room's specific collection
-        this.questions = questionsSnapshot.docs
-          .map((doc) => doc.data())
-          .sort((a, b) => (a.order || 0) - (b.order || 0));
-
-        console.log(`Loaded ${this.questions.length} room-specific questions`);
-        return;
+      if (!smsRes.ok || !dialogueRes.ok || !imageRes.ok) {
+        throw new Error("Failed to fetch questions from GitHub");
       }
 
-      console.log("No room-specific questions found, using fallback questions");
-      // Use fallback questions
-      this.questions = this.generateSampleQuestions().slice(
+      const [smsData, dialogueData, imageData] = await Promise.all([
+        smsRes.json(),
+        dialogueRes.json(),
+        imageRes.json(),
+      ]);
+
+      console.log("Fetched questions:", {
+        sms: smsData.length,
+        dialogue: dialogueData.length,
+        image: imageData.length,
+      });
+
+      // Transform questions based on quiz type
+      let allQuestions = [];
+
+      // SMS questions
+      const smsQuestions = smsData.map((sms, index) => ({
+        id: `sms-${index}`,
+        type: "sms",
+        content: sms.text,
+        sender: sms.sender || "جهة مجهولة",
+        timestamp: "الآن",
+        correctAnswer: sms.isPhish ? "phishing" : "safe",
+        difficulty: sms.difficulty || 2,
+        explanation: sms.explanation || "لا توجد تفاصيل إضافية",
+      }));
+
+      // Dialogue questions
+      const dialogueQuestions = dialogueData.map((dialogue, index) => ({
+        id: `dialogue-${index}`,
+        type: "dialogue",
+        messages: dialogue.messages || [],
+        correctAnswer: "phishing", // Default for dialogue questions
+        difficulty: dialogue.difficulty || 2,
+        explanation: dialogue.explanation || "لا توجد تفاصيل إضافية",
+      }));
+
+      // Image questions
+      const imageQuestions = imageData.map((image, index) => ({
+        id: `image-${index}`,
+        type: "image",
+        imageUrl: image.url,
+        description: image.description || "",
+        correctAnswer: image.isPhish ? "phishing" : "safe",
+        difficulty: image.difficulty || 2,
+        explanation: image.explanation || "لا توجد تفاصيل إضافية",
+      }));
+
+      // Select questions based on quiz type
+      switch (this.quizType) {
+        case "sms":
+          allQuestions = smsQuestions;
+          break;
+        case "dialogue":
+          allQuestions = dialogueQuestions;
+          break;
+        case "image":
+          allQuestions = imageQuestions;
+          break;
+        case "mixed":
+        default:
+          // Mix questions proportionally
+          const smsCount = Math.ceil(this.totalQuestions * 0.4);
+          const dialogueCount = Math.ceil(this.totalQuestions * 0.3);
+          const imageCount = this.totalQuestions - smsCount - dialogueCount;
+
+          allQuestions = [
+            ...this.shuffleArray(smsQuestions).slice(0, smsCount),
+            ...this.shuffleArray(dialogueQuestions).slice(0, dialogueCount),
+            ...this.shuffleArray(imageQuestions).slice(0, imageCount),
+          ];
+          break;
+      }
+
+      // Shuffle and limit to total questions
+      this.questions = this.shuffleArray(allQuestions).slice(
         0,
         this.totalQuestions
+      );
+      console.log(
+        `Loaded ${this.questions.length} questions for quiz type: ${this.quizType}`
       );
     } catch (error) {
-      console.error("Error loading questions:", error);
+      console.error("Error loading questions from GitHub:", error);
+      // Fallback to sample questions
       this.questions = this.generateSampleQuestions().slice(
         0,
         this.totalQuestions
       );
-      this.showToast(
-        "تم استخدام أسئلة تجريبية بسبب مشكلة في التحميل",
-        "warning"
-      );
+      console.log("Using fallback questions:", this.questions.length);
     }
+  }
+
+  shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
   }
 
   startGame() {
@@ -321,35 +370,37 @@ class RoomGame {
         this.showImageQuestion(question);
         break;
       default:
-        this.showSMSQuestion(question); // Default to SMS
+        this.showSMSQuestion(question);
         break;
     }
 
     this.updateQuestionProgress();
     this.updateDifficultyIndicator(question.difficulty || 2);
+
+    // Reset and start timer
+    this.timer = 5;
+    this.updateTimerDisplay();
+    this.startTimer();
   }
 
   showSMSQuestion(question) {
     this.showElement("smsQuestion");
-    if (document.getElementById("smsContent")) {
-      document.getElementById("smsContent").textContent = question.content;
-    }
-    if (document.getElementById("smsSender")) {
-      document.getElementById("smsSender").textContent =
-        question.sender || "جهة مجهولة";
-    }
-    if (document.getElementById("smsTimestamp")) {
-      document.getElementById("smsTimestamp").textContent =
-        question.timestamp || "الآن";
-    }
+    const smsContent = document.getElementById("smsContent");
+    const smsSender = document.getElementById("smsSender");
+    const smsTimestamp = document.getElementById("smsTimestamp");
+
+    if (smsContent) smsContent.textContent = question.content;
+    if (smsSender) smsSender.textContent = question.sender || "جهة مجهولة";
+    if (smsTimestamp) smsTimestamp.textContent = question.timestamp || "الآن";
   }
 
   showDialogueQuestion(question) {
     this.showElement("dialogueQuestion");
     const messagesContainer = document.getElementById("dialogueMessages");
+    const submitBtn = document.getElementById("submitDialogueBtn");
+
     if (messagesContainer) {
       messagesContainer.innerHTML = "";
-
       (question.messages || []).forEach((msg, index) => {
         const messageElement = document.createElement("div");
         messageElement.className = `flex ${
@@ -365,22 +416,22 @@ class RoomGame {
       });
     }
 
-    // Show submit button for dialogue questions
-    this.showElement("submitDialogue");
+    if (submitBtn) this.showElement("submitDialogueBtn");
   }
 
   showImageQuestion(question) {
     this.showElement("imageQuestion");
     const imgElement = document.getElementById("questionImage");
+    const imgDescription = document.getElementById("imageDescription");
+
     if (imgElement) {
       imgElement.src =
         question.imageUrl ||
         "https://images.unsplash.com/photo-1584824486509-112e4181ff6b?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
       imgElement.alt = question.description || "صورة السؤال";
     }
-    if (document.getElementById("imageDescription")) {
-      document.getElementById("imageDescription").textContent =
-        question.description || "";
+    if (imgDescription) {
+      imgDescription.textContent = question.description || "";
     }
   }
 
@@ -388,9 +439,10 @@ class RoomGame {
     if (this.hasAnswered) return;
 
     const question = this.questions[this.currentQuestionIndex];
-    const isCorrect = this.checkAnswer(answer, question);
+    const isCorrect = answer === question.correctAnswer;
 
     this.hasAnswered = true;
+    clearInterval(this.timerInterval);
 
     // Update player score
     if (isCorrect) {
@@ -400,32 +452,44 @@ class RoomGame {
       this.currentStreak = 0;
     }
 
-    // Update Firestore
-    await this.updatePlayerScore();
+    // Update Firestore with player's answer
+    await this.updatePlayerAnswer(answer, isCorrect);
 
-    // Show results
+    // Show results for 1 second
     this.showResults(isCorrect, question.explanation);
+
+    // Move to next question after 1 second
+    setTimeout(() => {
+      this.nextQuestion();
+    }, 1000);
   }
 
-  checkAnswer(answer, question) {
-    if (question.type === "dialogue") {
-      // For dialogue questions, we need to check multiple answers
-      // This is a simplified version - you'll need to implement the actual logic
-      return answer === "safe"; // Placeholder
-    }
-    return answer === question.correctAnswer;
-  }
-
-  async updatePlayerScore() {
+  async updatePlayerAnswer(answer, isCorrect) {
     try {
       const playerRef = doc(db, `rooms/${this.roomId}/players`, this.userId);
       await updateDoc(playerRef, {
         score: this.userScore,
         lastAnswer: serverTimestamp(),
+        [`answers.${this.currentQuestionIndex}`]: {
+          answer: answer,
+          correct: isCorrect,
+          timestamp: serverTimestamp(),
+        },
+      });
+
+      // Also update the main room document for real-time sync
+      const roomRef = doc(db, "rooms", this.roomId);
+      await updateDoc(roomRef, {
+        [`scores.${this.userId}`]: this.userScore,
       });
     } catch (error) {
-      console.error("Error updating player score:", error);
+      console.error("Error updating player answer:", error);
     }
+  }
+
+  handleDialogueSubmission() {
+    // For dialogue questions, use a simple approach
+    this.handleAnswer("phishing");
   }
 
   showResults(isCorrect, explanation) {
@@ -437,13 +501,12 @@ class RoomGame {
     const resultMessage = document.getElementById("resultMessage");
     const resultExplanation = document.getElementById("resultExplanation");
     const pointsEarned = document.getElementById("pointsEarned");
-    const playersCorrect = document.getElementById("playersCorrect");
 
     if (isCorrect) {
       resultIcon.textContent = "✓";
       resultTitle.textContent = "إجابة صحيحة!";
       resultMessage.textContent = "لقد تعرفت بنجاح على محاولة الاحتيال.";
-      resultTitle.className = "text-xl font-bold text-white mb-2";
+      resultTitle.className = "text-xl font-bold text-green-400 mb-2";
     } else {
       resultIcon.textContent = "✗";
       resultTitle.textContent = "إجابة خاطئة";
@@ -451,34 +514,32 @@ class RoomGame {
       resultTitle.className = "text-xl font-bold text-red-400 mb-2";
     }
 
-    resultExplanation.textContent = explanation;
-    pointsEarned.textContent = isCorrect ? "+50" : "+0";
-
-    // Calculate how many players answered correctly (simplified)
-    const correctPlayers = this.players.filter((p) => p.lastAnswer).length;
-    playersCorrect.textContent = `${correctPlayers}/${this.players.length}`;
-
-    // Move to next question after delay
-    setTimeout(() => {
-      this.nextQuestion();
-    }, 3000);
+    if (resultExplanation) resultExplanation.textContent = explanation;
+    if (pointsEarned) pointsEarned.textContent = isCorrect ? "+50" : "+0";
   }
 
   async nextQuestion() {
     this.currentQuestionIndex++;
 
     if (this.currentQuestionIndex >= this.totalQuestions) {
-      this.endGame();
+      await this.endGame();
     } else {
-      // Update room's current question
-      await updateDoc(doc(db, "rooms", this.roomId), {
-        currentQuestion: this.currentQuestionIndex,
-      });
+      // Update room's current question in Firestore
+      try {
+        await updateDoc(doc(db, "rooms", this.roomId), {
+          currentQuestion: this.currentQuestionIndex,
+        });
+      } catch (error) {
+        console.error("Error updating current question:", error);
+        // Continue anyway
+        this.loadQuestion();
+      }
     }
   }
 
   startTimer() {
-    this.timer = 30;
+    clearInterval(this.timerInterval);
+    this.timer = 5;
     this.updateTimerDisplay();
 
     this.timerInterval = setInterval(() => {
@@ -487,57 +548,73 @@ class RoomGame {
 
       if (this.timer <= 0) {
         clearInterval(this.timerInterval);
-        this.handleTimeUp();
+        if (!this.hasAnswered) {
+          this.handleAnswer(""); // Auto-submit as wrong answer
+        }
       }
     }, 1000);
   }
 
-  handleTimeUp() {
-    if (!this.hasAnswered) {
-      this.handleAnswer(""); // Force answer as wrong
-    }
-  }
-
-  endGame() {
+  async endGame() {
+    console.log("Game ended");
     clearInterval(this.timerInterval);
 
-    // Update room status
-    updateDoc(doc(db, "rooms", this.roomId), {
-      status: "ended",
-      endedAt: serverTimestamp(),
-    });
+    try {
+      // Update room status to ended
+      const roomRef = doc(db, "rooms", this.roomId);
+      await updateDoc(roomRef, {
+        status: "ended",
+        endedAt: serverTimestamp(),
+      });
 
-    this.showGameOverModal();
+      this.showGameOverModal();
+    } catch (error) {
+      console.error("Error ending game:", error);
+      this.showGameOverModal();
+    }
   }
 
   showGameOverModal() {
     const modal = document.getElementById("gameOverModal");
     const finalScores = document.getElementById("finalScores");
 
+    if (!modal || !finalScores) return;
+
     // Sort players by score
-    const sortedPlayers = [...this.players].sort((a, b) => b.score - a.score);
+    const sortedPlayers = [...this.players].sort(
+      (a, b) => (b.score || 0) - (a.score || 0)
+    );
 
     finalScores.innerHTML = sortedPlayers
       .map(
         (player, index) => `
-      <div class="flex items-center justify-between ${
+      <div class="flex items-center justify-between p-3 bg-white/5 rounded-lg ${
         index === 0 ? "text-yellow-400" : "text-white"
       }">
         <div class="flex items-center gap-3">
           <span class="font-bold">${index + 1}.</span>
           <span>${player.displayName}</span>
-          ${player.isHost ? '<span class="text-yellow-400">👑</span>' : ""}
+          ${
+            player.isHost
+              ? '<span class="text-yellow-400 text-sm">👑 المضيف</span>'
+              : ""
+          }
         </div>
-        <span class="font-bold">${player.score} نقطة</span>
+        <span class="font-bold">${player.score || 0} نقطة</span>
       </div>
     `
       )
       .join("");
 
     modal.classList.remove("hidden");
+
+    // Remove room listener to prevent spam
+    if (this.roomListener) {
+      this.roomListener();
+    }
   }
 
-  // Helper methods for UI management
+  // Helper methods
   showElement(elementId) {
     const element = document.getElementById(elementId);
     if (element) element.classList.remove("hidden");
@@ -552,34 +629,42 @@ class RoomGame {
     this.hideElement("smsQuestion");
     this.hideElement("dialogueQuestion");
     this.hideElement("imageQuestion");
-    this.hideElement("submitDialogue");
+    this.hideElement("submitDialogueBtn");
   }
 
   updateQuestionProgress() {
-    document.getElementById("currentQuestion").textContent =
-      this.currentQuestionIndex + 1;
-    document.getElementById("totalQuestions").textContent = this.totalQuestions;
+    const currentQuestionEl = document.getElementById("currentQuestion");
+    const totalQuestionsEl = document.getElementById("totalQuestions");
+
+    if (currentQuestionEl) {
+      currentQuestionEl.textContent = this.currentQuestionIndex + 1;
+    }
+    if (totalQuestionsEl) {
+      totalQuestionsEl.textContent = this.totalQuestions;
+    }
   }
 
   updateDifficultyIndicator(difficulty) {
     const stars = document.querySelectorAll(".difficulty-star");
-    stars.forEach((star, index) => {
-      if (index < difficulty) {
-        star.classList.add("text-yellow-400");
-        star.classList.remove("text-gray-400");
-      } else {
-        star.classList.remove("text-yellow-400");
-        star.classList.add("text-gray-400");
-      }
-    });
+    if (stars.length > 0) {
+      stars.forEach((star, index) => {
+        if (index < difficulty) {
+          star.classList.add("text-yellow-400");
+          star.classList.remove("text-gray-400");
+        } else {
+          star.classList.remove("text-yellow-400");
+          star.classList.add("text-gray-400");
+        }
+      });
+    }
   }
 
   updateTimerDisplay() {
     const timerElement = document.getElementById("timer");
     if (timerElement) {
       timerElement.textContent = this.timer;
-      timerElement.className = `text-2xl font-bold ${
-        this.timer <= 10 ? "text-red-400 animate-pulse" : "text-white"
+      timerElement.className = `text-white font-medium ${
+        this.timer <= 3 ? "text-red-400 animate-pulse" : ""
       }`;
     }
   }
@@ -591,36 +676,23 @@ class RoomGame {
     playersList.innerHTML = this.players
       .map(
         (player) => `
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
         <div class="flex items-center gap-2">
           <div class="w-3 h-3 rounded-full ${
             player.isReady ? "bg-green-500" : "bg-yellow-500"
           }"></div>
-          <span class="text-white">${player.displayName}</span>
-          ${player.isHost ? '<span class="text-yellow-400">👑</span>' : ""}
+          <span class="text-white text-sm">${player.displayName}</span>
+          ${
+            player.isHost
+              ? '<span class="text-yellow-400 text-xs">👑</span>'
+              : ""
+          }
         </div>
-        <span class="text-blue-200">${player.score || 0}</span>
+        <span class="text-blue-200 text-sm">${player.score || 0}</span>
       </div>
     `
       )
       .join("");
-  }
-
-  getQuizTypeName(quizType) {
-    const types = {
-      sms: "رسائل SMS",
-      dialogue: "حوارات",
-      image: "صور مشبوهة",
-      mixed: "كوكتيل أسئلة",
-    };
-    return types[quizType] || quizType;
-  }
-
-  hideLoading() {
-    const loadingOverlay = document.getElementById("loadingOverlay");
-    if (loadingOverlay) {
-      loadingOverlay.style.display = "none";
-    }
   }
 
   showWaitingMessage(message) {
@@ -637,8 +709,14 @@ class RoomGame {
     }
   }
 
+  hideLoading() {
+    const loadingOverlay = document.getElementById("loadingOverlay");
+    if (loadingOverlay) {
+      loadingOverlay.style.display = "none";
+    }
+  }
+
   showError(message) {
-    // Replace alert with a better error display
     const errorDiv = document.createElement("div");
     errorDiv.className =
       "fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white p-4 rounded-lg z-50";
@@ -657,23 +735,15 @@ class RoomGame {
       if (document.body.contains(errorDiv)) {
         document.body.removeChild(errorDiv);
       }
-      // Redirect to dashboard after error
       setTimeout(() => {
         window.location.href = "dashboard.html";
       }, 2000);
     }, 5000);
   }
 
-  showToast(message, type = "info") {
-    // Implement toast notification
-    console.log(`${type}: ${message}`);
-  }
-
   generateSampleQuestions() {
-    // Generate sample questions if API fails
     return [
       {
-        id: 1,
         type: "sms",
         content:
           "عزيزي العميل، لديك رصيد مجاني 10 دينار. لاستلامه اضغط على الرابط: bit.ly/free-balance",
@@ -683,38 +753,17 @@ class RoomGame {
         difficulty: 2,
         explanation: "هذه رسالة تصيد تحتوي على رابط مختصر مشبوه",
       },
-      {
-        id: 2,
-        type: "dialogue",
-        messages: [
-          {
-            text: "مرحباً، أنا من شركة Microsoft ولدينا مشكلة في حسابك",
-            isUser: false,
-            time: "10:30 ص",
-          },
-          {
-            text: "ما هي المشكلة؟",
-            isUser: true,
-            time: "10:31 ص",
-          },
-        ],
-        correctAnswers: ["phishing"],
-        difficulty: 3,
-        explanation: "شركة Microsoft لا تتصل بالعملاء بهذه الطريقة",
-      },
     ];
   }
 }
 
 // Initialize the game when the page loads
 document.addEventListener("DOMContentLoaded", () => {
-  // Check if user is authenticated
   auth.onAuthStateChanged((user) => {
     if (!user) {
       window.location.href = "newlogin.html";
       return;
     }
-
     new RoomGame();
   });
 });
