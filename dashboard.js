@@ -4,8 +4,7 @@ import { loadFriendRequests, sendFriendRequest } from "./friends.js";
 import { loadRoomInvites, setupRoomInviteListener } from "./room-invites.js";
 import { checkDailyStreak } from "./streak.js";
 import { loadProfileData } from "./profile.js";
-import { startTutorial, endTutorial, isTutorialActive } from "./tutorial.js";
-import { showLobbyModal } from "./room-system.js";
+import { startTutorial, endTutorial } from "./tutorial.js";
 import {
   doc,
   updateDoc,
