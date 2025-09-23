@@ -9,17 +9,18 @@ import {
   getDocs,
   orderBy,
   limit,
+  deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
   onAuthStateChanged,
   signOut,
+  deleteUser,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 // Handle avatar loading errors
 function handleAvatarError(img) {
   console.log("Avatar image failed to load, using fallback");
-  img.src =
-    "https://images.unsplash.com/photo-1584824486509-112e4181ff6b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=120&h=120&crop=face";
+  img.src = "img.svg";
   img.onerror = null; // Prevent infinite loop if fallback also fails
 }
 
@@ -30,28 +31,6 @@ function formatNumberArabic(n) {
 function updateValue(elementId, value) {
   const el = document.getElementById(elementId);
   if (el) el.textContent = value || "—";
-}
-
-function updateWeeklyChart(weeklyData) {
-  const bars = document.querySelectorAll("[data-day]");
-  if (!bars.length) return;
-
-  const map = {};
-  if (weeklyData && typeof weeklyData === "object") {
-    Object.entries(weeklyData).forEach(([day, value]) => {
-      map[day.trim()] = Number(value) || 0;
-    });
-  }
-
-  const maxVal = Math.max(...Object.values(map), 1);
-  const maxHeight = 120;
-
-  bars.forEach((bar) => {
-    const day = bar.dataset.day;
-    const value = map[day] || 0;
-    bar.style.height = `${Math.max(8, (value / maxVal) * maxHeight)}px`;
-    bar.dataset.value = value;
-  });
 }
 
 function renderAchievements(achievements) {
@@ -116,11 +95,7 @@ function renderFriendsPreview(friends) {
     card.className =
       "friend-card flex items-center gap-4 p-4 bg-surface-700/30 rounded-lg";
     card.innerHTML = `
-      <img src="${
-        friend.avatar ||
-        friend.photoURL ||
-        "https://images.unsplash.com/photo-1584824486509-112e4181ff6b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=48&h=48&crop=face"
-      }" alt="${
+      <img src="${friend.avatar || friend.photoURL || "img.svg"}" alt="${
       friend.name || friend.displayName || "صديق"
     }" class="w-12 h-12 rounded-full border-2 ${
       friend.status === "online" ? "border-accent-400" : "border-slate-600"
@@ -167,11 +142,7 @@ function renderAllFriendsModal(friends) {
       .map(
         (friend) => `
       <div class="friend-card flex items-center gap-4 p-4 bg-surface-700/30 rounded-lg">
-        <img src="${
-          friend.avatar ||
-          friend.photoURL ||
-          "https://images.unsplash.com/photo-1584824486509-112e4181ff6b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=48&h=48&crop=face"
-        }" alt="${
+        <img src="${friend.avatar || friend.photoURL || "img.svg"}" alt="${
           friend.name || friend.displayName || "صديق"
         }" class="w-12 h-12 rounded-full border-2 ${
           friend.status === "online" ? "border-accent-400" : "border-slate-600"
@@ -206,33 +177,105 @@ function renderAllFriendsModal(friends) {
   modal.classList.remove("hidden");
 }
 
-function showConfirmationModal(title, message, onConfirm) {
+function showConfirmationModal(
+  title,
+  message,
+  onConfirm,
+  requiresCheckbox = false
+) {
   const modal = document.getElementById("confirmation-modal");
   const titleEl = document.getElementById("modal-title");
   const messageEl = document.getElementById("modal-message");
-  const cancelBtn = document.getElementById("modal-cancel");
-  const confirmBtn = document.getElementById("modal-confirm");
-  if (!modal || !titleEl || !messageEl || !cancelBtn || !confirmBtn) return;
 
+  if (!modal || !titleEl || !messageEl) return;
+
+  // Clear previous content and reset
   titleEl.textContent = title;
   messageEl.textContent = message;
-  modal.classList.remove("hidden");
 
-  // Set up new event listeners
+  // Remove any existing checkbox
+  const existingCheckbox = document.getElementById("checkbox-input");
+  if (existingCheckbox) {
+    existingCheckbox.remove();
+  }
+
+  // Get fresh button references (they might have been cloned before)
+  let confirmBtn = document.getElementById("modal-confirm");
+  let cancelBtn = document.getElementById("modal-cancel");
+
+  // Clone and replace buttons to remove old event listeners
   const newConfirmBtn = confirmBtn.cloneNode(true);
+  const newCancelBtn = cancelBtn.cloneNode(true);
   confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+  cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
 
-  newConfirmBtn.onclick = () => {
+  // Update references to the new buttons
+  confirmBtn = newConfirmBtn;
+  cancelBtn = newCancelBtn;
+
+  // Reset confirm button state
+  confirmBtn.disabled = false;
+  confirmBtn.style.opacity = "1";
+  confirmBtn.style.cursor = "pointer";
+
+  // Add checkbox if required
+  if (requiresCheckbox) {
+    const checkboxField = document.createElement("div");
+    checkboxField.id = "checkbox-input";
+    checkboxField.className =
+      "mb-4 flex items-center gap-3 bg-surface-700/50 p-3 rounded-lg";
+    checkboxField.innerHTML = `
+      <input type="checkbox" id="confirm-delete" 
+             class="w-5 h-5 text-error-600 bg-surface-800 border-surface-600 rounded focus:ring-error-500 focus:ring-2">
+      <label for="confirm-delete" class="text-slate-300 text-sm">
+        أنا أدرك أن هذا الإجراء لا يمكن التراجع عنه وأوافق على حذف حسابي نهائياً
+      </label>
+    `;
+    messageEl.parentNode.insertBefore(checkboxField, messageEl.nextSibling);
+
+    // Initially disable confirm button
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = "0.5";
+    confirmBtn.style.cursor = "not-allowed";
+
+    // Add checkbox change listener
+    const checkbox = document.getElementById("confirm-delete");
+    checkbox.addEventListener("change", function () {
+      if (this.checked) {
+        confirmBtn.disabled = false;
+        confirmBtn.style.opacity = "1";
+        confirmBtn.style.cursor = "pointer";
+      } else {
+        confirmBtn.disabled = true;
+        confirmBtn.style.opacity = "0.5";
+        confirmBtn.style.cursor = "not-allowed";
+      }
+    });
+  }
+
+  // Add click event listeners
+  confirmBtn.addEventListener("click", function confirmHandler() {
+    if (requiresCheckbox) {
+      const isChecked = document.getElementById("confirm-delete")?.checked;
+      if (!isChecked) {
+        alert("يرجى الموافقة على المربع لتأكيد حذف الحساب");
+        return;
+      }
+    }
     onConfirm();
     modal.classList.add("hidden");
-  };
+  });
 
-  cancelBtn.onclick = () => modal.classList.add("hidden");
+  cancelBtn.addEventListener("click", function cancelHandler() {
+    modal.classList.add("hidden");
+  });
+
+  // Show the modal
+  modal.classList.remove("hidden");
 }
-
 function animateCounters() {
   const counters = document.querySelectorAll(
-    "#total-points, #current-streak, #total-questions"
+    "#total-points, #current-streak, #total-questions, #accuracy-rate"
   );
   counters.forEach((counter) => {
     counter.style.opacity = "0";
@@ -255,26 +298,6 @@ function addInteractiveEffects() {
     card.addEventListener("mouseleave", () => {
       card.style.transform = "translateX(0)";
       card.style.backgroundColor = "rgba(51, 65, 85, 0.3)";
-    });
-  });
-
-  const chartBars = document.querySelectorAll("[data-day]");
-  chartBars.forEach((bar) => {
-    bar.addEventListener("mouseenter", () => {
-      const day = bar.dataset.day;
-      const value = bar.dataset.value || 0;
-      const tooltip = document.createElement("div");
-      tooltip.className =
-        "absolute bg-black text-white px-2 py-1 rounded text-xs z-10 -top-8 left-1/2 transform -translate-x-1/2";
-      tooltip.textContent = `${day}: ${value} نقطة`;
-      bar.parentElement.style.position = "relative";
-      bar.parentElement.appendChild(tooltip);
-      bar.style.backgroundColor = "#FBBF24";
-    });
-    bar.addEventListener("mouseleave", () => {
-      const tooltip = bar.parentElement.querySelector(".absolute");
-      if (tooltip) tooltip.remove();
-      bar.style.backgroundColor = "#F59E0B";
     });
   });
 }
@@ -301,19 +324,6 @@ function initializeAchievements() {
       this.style.transform = "scale(1) rotate(0deg)";
     });
   });
-}
-
-function simulateRealTimeUpdates() {
-  const stats = ["current-streak", "total-points"];
-  const randomStat = stats[Math.floor(Math.random() * stats.length)];
-  const element = document.getElementById(randomStat);
-
-  if (element) {
-    element.style.animation = "pulse 0.5s ease-in-out";
-    setTimeout(() => {
-      element.style.animation = "";
-    }, 500);
-  }
 }
 
 // Set up event listeners that don't depend on Firebase data
@@ -430,7 +440,10 @@ function initApp() {
           new Date(user.metadata.creationTime).toLocaleDateString("ar-EG")
         }`
       );
-      updateValue("user-rank", `#${data.rank || data.ranking || "—"}`);
+
+      // FIXED: Handle rank properly - check multiple possible fields
+      const userRank = data.rank || data.ranking || data.globalRank || "—";
+      updateValue("user-rank", `#${userRank}`);
 
       const avatarEl = document.getElementById("user-avatar");
       if (avatarEl) {
@@ -453,7 +466,7 @@ function initApp() {
 
       // Calculate accuracy rate
       const totalCorrect = stats.total_correct || data.correctAnswers || 0;
-      const totalWrong = stats.total_wrong || data.wrongAnswers || 0; // If total_wrong not present, defaults to 0
+      const totalWrong = stats.total_wrong || data.wrongAnswers || 0;
       const totalAnswered = totalCorrect + totalWrong;
       const accuracyRate =
         totalAnswered > 0
@@ -462,9 +475,6 @@ function initApp() {
       updateValue("accuracy-rate", `${accuracyRate}%`);
 
       updateValue("total-questions", formatNumberArabic(totalAnswered));
-
-      // Update weekly chart
-      updateWeeklyChart(stats.weekly || data.weeklyStats || data.weekly || {});
 
       // Update achievements
       const achievements =
@@ -550,9 +560,6 @@ function initApp() {
       animateCounters();
       addInteractiveEffects();
       initializeAchievements();
-
-      // Update stats every 45 seconds
-      setInterval(simulateRealTimeUpdates, 45000);
     } catch (error) {
       console.error("Error loading profile:", error);
       // Don't show alert, just use fallback data
@@ -600,30 +607,50 @@ function setupUserEventListeners(friends, user) {
           .then(() => {
             document.body.style.transition = "opacity 0.5s ease-out";
             document.body.style.opacity = "0";
-            setTimeout(() => (window.location.href = "/login_test.html"), 500);
+            setTimeout(() => (window.location.href = "./newlogin.html"), 500);
           })
           .catch((error) => {
             console.error("Sign out error:", error);
+            alert("حدث خطأ أثناء تسجيل الخروج: " + error.message);
           });
       });
     });
   }
 
-  // Delete account functionality
+  // Delete account functionality - UPDATED with checkbox
   const deleteAccountBtn = document.getElementById("delete-account-btn");
   if (deleteAccountBtn) {
     deleteAccountBtn.addEventListener("click", () => {
       showConfirmationModal(
         "حذف الحساب",
         "تحذير: هذا الإجراء لا يمكن التراجع عنه. سيتم حذف جميع بياناتك نهائياً.",
-        () => {
-          const deleteAnimation = document.createElement("div");
-          deleteAnimation.className =
-            "fixed inset-0 bg-error-600 z-50 flex items-center justify-center";
-          deleteAnimation.innerHTML = `<div class="text-center text-white"><div class="text-6xl mb-4">⚠️</div><h2 class="text-2xl font-bold mb-2">جاري حذف الحساب...</h2><p class="text-lg opacity-75">شكراً لاستخدامك Zero Fake</p></div>`;
-          document.body.appendChild(deleteAnimation);
-          setTimeout(() => (window.location.href = "/login_test.html"), 3000);
-        }
+        async () => {
+          try {
+            // Show loading animation
+            const deleteAnimation = document.createElement("div");
+            deleteAnimation.className =
+              "fixed inset-0 bg-error-600 z-50 flex items-center justify-center";
+            deleteAnimation.innerHTML = `<div class="text-center text-white"><div class="text-6xl mb-4">⚠️</div><h2 class="text-2xl font-bold mb-2">جاري حذف الحساب...</h2><p class="text-lg opacity-75">شكراً لاستخدامك Zero Fake</p></div>`;
+            document.body.appendChild(deleteAnimation);
+
+            // Delete user data from Firestore first
+            const userRef = doc(db, "users", user.uid);
+            await deleteDoc(userRef);
+
+            // Then delete the auth account
+            await deleteUser(user);
+
+            setTimeout(() => (window.location.href = "./newlogin.html"), 2000);
+          } catch (error) {
+            console.error("Error deleting account:", error);
+            alert("حدث خطأ أثناء حذف الحساب: " + error.message);
+
+            // Remove loading animation
+            const deleteAnimation = document.querySelector(".fixed.inset-0");
+            if (deleteAnimation) deleteAnimation.remove();
+          }
+        },
+        true // Requires checkbox confirmation
       );
     });
   }

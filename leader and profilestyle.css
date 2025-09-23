@@ -1203,6 +1203,29 @@ html {
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
 }
 
+/* More specific selector for the confirm button */
+#confirmation-modal #modal-confirm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+#confirmation-modal #modal-confirm:not(:disabled) {
+    opacity: 1;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+#confirmation-modal #modal-confirm:not(:disabled):hover {
+    background-color: #b91c1c;
+    /* Darker red on hover */
+}
+
+#confirm-delete {
+    accent-color: #dc2626;
+}
+
+
 :root {
     /* Primary Colors */
     --color-primary: #1E40AF;
