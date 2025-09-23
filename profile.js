@@ -5,7 +5,7 @@ import {
   updateDoc,
   setDoc,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { updateLevelsStatus } from "./training.js";
+import { updateLevelsStatus } from "./dashboard.js";
 export async function loadProfileData() {
   const user = auth.currentUser;
   if (!user) return;

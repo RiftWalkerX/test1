@@ -19,8 +19,6 @@ function showToast(message, type = "info") {
   );
 }
 
-// --- Training.js Functions ---
-
 // --- Handle level click: show modal with level info and start/cancel buttons ---
 export async function handleLevelClick(level) {
   const user = auth.currentUser;
