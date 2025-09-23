@@ -1,4 +1,4 @@
-// room-system.js - Fixed version
+// room-system.js - Fixed version with proper exports and function order
 import { auth, db } from "./firebase-init.js";
 import { sendFriendRequest } from "./friends.js";
 import {
@@ -26,42 +26,7 @@ let currentQuizType = null;
 let currentQuestionCount = 10;
 let isHost = false;
 
-// --- Room Creation Modal ---
-export function setupRoomCreationModal() {
-  const createRoomBtn = document.getElementById("createRoomBtn");
-  const joinRoomBtn = document.getElementById("joinRoomBtn");
-  const roomCreationModal = document.getElementById("roomCreationModal");
-  const joinRoomModal = document.getElementById("joinRoomModal");
-  const closeRoomCreationBtn = document.getElementById("closeRoomCreationBtn");
-  const closeJoinRoomBtn = document.getElementById("closeJoinRoomBtn");
-  const createRoomConfirmBtn = document.getElementById("createRoomConfirmBtn");
-  const joinRoomConfirmBtn = document.getElementById("joinRoomConfirmBtn");
-
-  // Create room button
-  createRoomBtn?.addEventListener("click", () => {
-    showModal(roomCreationModal);
-  });
-
-  // Join room button
-  joinRoomBtn?.addEventListener("click", () => {
-    showModal(joinRoomModal);
-  });
-
-  // Close buttons
-  closeRoomCreationBtn?.addEventListener("click", () => {
-    hideModal(roomCreationModal);
-  });
-
-  closeJoinRoomBtn?.addEventListener("click", () => {
-    hideModal(joinRoomModal);
-  });
-
-  // Confirm buttons
-  createRoomConfirmBtn?.addEventListener("click", createRoom);
-  joinRoomConfirmBtn?.addEventListener("click", joinRoom);
-}
-
-// Create a new room - FIXED VERSION
+// --- Create Room Function ---
 async function createRoom() {
   const user = auth.currentUser;
   if (!user) {
@@ -132,7 +97,7 @@ async function createRoom() {
   }
 }
 
-// Join an existing room - FIXED VERSION
+// --- Join Room Function ---
 async function joinRoom() {
   const user = auth.currentUser;
   if (!user) {
@@ -222,8 +187,43 @@ async function joinRoom() {
   }
 }
 
+// --- Room Creation Modal ---
+export function setupRoomCreationModal() {
+  const createRoomBtn = document.getElementById("createRoomBtn");
+  const joinRoomBtn = document.getElementById("joinRoomBtn");
+  const roomCreationModal = document.getElementById("roomCreationModal");
+  const joinRoomModal = document.getElementById("joinRoomModal");
+  const closeRoomCreationBtn = document.getElementById("closeRoomCreationBtn");
+  const closeJoinRoomBtn = document.getElementById("closeJoinRoomBtn");
+  const createRoomConfirmBtn = document.getElementById("createRoomConfirmBtn");
+  const joinRoomConfirmBtn = document.getElementById("joinRoomConfirmBtn");
+
+  // Create room button
+  createRoomBtn?.addEventListener("click", () => {
+    showModal(roomCreationModal);
+  });
+
+  // Join room button
+  joinRoomBtn?.addEventListener("click", () => {
+    showModal(joinRoomModal);
+  });
+
+  // Close buttons
+  closeRoomCreationBtn?.addEventListener("click", () => {
+    hideModal(roomCreationModal);
+  });
+
+  closeJoinRoomBtn?.addEventListener("click", () => {
+    hideModal(joinRoomModal);
+  });
+
+  // Confirm buttons
+  createRoomConfirmBtn?.addEventListener("click", createRoom);
+  joinRoomConfirmBtn?.addEventListener("click", joinRoom);
+}
+
 // --- Lobby Modal ---
-function showLobbyModal(roomId, userIsHost) {
+export function showLobbyModal(roomId, userIsHost) {
   const lobbyModal = document.getElementById("lobbyModal");
   const roomCodeElement = document.getElementById("roomCode");
   const roomNameElement = document.getElementById("lobbyRoomName");
@@ -280,6 +280,9 @@ function showLobbyModal(roomId, userIsHost) {
 
   showModal(lobbyModal);
 }
+
+// ... rest of the room-system.js code remains the same ...
+// ... rest of the room-system.js code remains the same ...
 
 function setupRoomListeners(
   roomId,

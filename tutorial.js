@@ -1,3 +1,4 @@
+// tutorial.js - Fixed version with proper exports
 // Tutorial steps configuration - expanded with more elements
 const tutorialSteps = [
   {
@@ -55,9 +56,10 @@ const tutorialSteps = [
     highlightPadding: 24,
   },
 ];
-// Tutorial state
+
+// Tutorial state - EXPORT THIS VARIABLE
+export let isTutorialActive = false;
 let currentStep = 0;
-let isTutorialActive = false;
 
 // Get element by ID or selector
 function getTutorialElement(step) {

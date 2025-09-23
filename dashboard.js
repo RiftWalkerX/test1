@@ -4,14 +4,15 @@ import { loadFriendRequests, sendFriendRequest } from "./friends.js";
 import { loadRoomInvites, setupRoomInviteListener } from "./room-invites.js";
 import { checkDailyStreak } from "./streak.js";
 import { loadProfileData } from "./profile.js";
-import { startTutorial, endTutorial } from "./tutorial.js";
+import { startTutorial, endTutorial, isTutorialActive } from "./tutorial.js";
+import { showLobbyModal } from "./room-system.js";
 import {
   doc,
   updateDoc,
   getDoc,
   arrayUnion,
   setDoc,
-  serverTimestamp,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Toast notification system
@@ -19,13 +20,12 @@ function showToast(message, type = "info") {
   const toast = document.createElement("div");
   toast.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm transform translate-x-full transition-transform duration-300`;
 
-  const bgColor =
-    {
-      warning: "bg-yellow-500",
-      success: "bg-green-500",
-      error: "bg-red-500",
-      info: "bg-blue-500",
-    }[type] || "bg-blue-500";
+  const bgColor = {
+    warning: "bg-yellow-500",
+    success: "bg-green-500",
+    error: "bg-red-500",
+    info: "bg-blue-500",
+  }[type] || "bg-blue-500";
 
   toast.classList.add(bgColor, "text-white");
 
@@ -119,14 +119,14 @@ async function joinRoomFromInvitation(roomId) {
     }
 
     const roomData = roomDoc.data();
-
+    
     if (roomData.status !== "waiting") {
       showToast("الغرفة لم تعد في حالة انتظار", "error");
       return;
     }
 
     // Check if user is already in the room
-    const existingPlayer = roomData.players.find((p) => p.uid === user.uid);
+    const existingPlayer = roomData.players.find(p => p.uid === user.uid);
     if (!existingPlayer) {
       // Add user to room if not already there
       const playerData = {
@@ -139,23 +139,24 @@ async function joinRoomFromInvitation(roomId) {
       };
 
       await updateDoc(roomRef, {
-        players: arrayUnion(playerData),
+        players: arrayUnion(playerData)
       });
 
       // Add to players subcollection
       await setDoc(doc(db, `rooms/${roomId}/players`, user.uid), {
         ...playerData,
-        joinedAt: serverTimestamp(),
+        joinedAt: serverTimestamp()
       });
     }
 
     // Show lobby modal instead of going directly to room
     showLobbyModal(roomId, false);
-
+    
     // Remove the parameter from URL
     window.history.replaceState({}, document.title, window.location.pathname);
 
     showToast("تم الانضمام إلى الغرفة بنجاح!", "success");
+
   } catch (error) {
     console.error("Error joining room from invitation:", error);
     showToast("فشل في الانضمام إلى الغرفة: " + error.message, "error");
@@ -202,7 +203,9 @@ async function handleLevelClick(level) {
       // ensure we remove previous handler to avoid stacking handlers
       startLevelBtn.replaceWith(startLevelBtn.cloneNode(true));
       const newStartBtn = document.getElementById("startLevelBtn");
-      newStartBtn.addEventListener("click", () => startTrainingLevel(level));
+      newStartBtn.addEventListener("click", () =>
+        startTrainingLevel(level)
+      );
     }
 
     // show modal
@@ -471,8 +474,8 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // Handle room invitations from URL parameters after auth is ready
     const urlParams = new URLSearchParams(window.location.search);
-    const joinRoomId = urlParams.get("joinRoom");
-
+    const joinRoomId = urlParams.get('joinRoom');
+    
     if (joinRoomId) {
       // Wait a bit for the page to load completely
       setTimeout(() => {
@@ -642,12 +645,12 @@ window.startTrainingLevel = startTrainingLevel;
 window.completeTrainingLevel = completeTrainingLevel;
 
 // Export for training modules
-export {
-  handleLevelClick,
-  getLevelData,
-  completeTrainingLevel,
+export { 
+  handleLevelClick, 
+  getLevelData, 
+  completeTrainingLevel, 
   updateLevelsStatus,
   showToast,
   showModal,
-  hideModal,
+  hideModal
 };
