@@ -2966,3 +2966,17 @@ button:disabled:hover {
 .accept-room-invite:hover, .deny-room-invite:hover {
   transform: translateY(-1px);
 }
+/* Style for dialogue checkboxes */
+input[type="checkbox"] {
+  accent-color: #ef4444; /* red-500 */
+}
+
+input[type="checkbox"]:checked {
+  background-color: #ef4444;
+  border-color: #ef4444;
+}
+
+/* Ensure proper spacing for dialogue messages */
+#dialogueMessages .flex.items-start {
+  margin-bottom: 1rem;
+}

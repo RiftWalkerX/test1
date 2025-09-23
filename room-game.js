@@ -1,10 +1,10 @@
-// room-game.js - Multiplayer room game implementation
+// room-game.js - Single-player room game implementation
 import { auth, db } from "./firebase-init.js";
 import {
   doc,
   getDoc,
   updateDoc,
-  setDoc, // Added this import
+  setDoc,
   onSnapshot,
   collection,
   getDocs,
@@ -25,8 +25,6 @@ let gameState = {
   players: [],
   questions: [],
   quizType: "mixed",
-  timer: 30,
-  timerInterval: null,
   hasAnswered: false,
 };
 
@@ -37,7 +35,7 @@ let questionContainer,
   waitingState,
   resultsState;
 let safeBtn, phishingBtn, submitDialogueBtn;
-let timerElement, userPointsElement, currentStreakElement;
+let userPointsElement, currentStreakElement;
 let playersListElement, currentQuestionElement, totalQuestionsElement;
 let roomTitleElement, roomCodeDisplayElement;
 
@@ -107,7 +105,6 @@ function cacheDOMElements() {
   phishingBtn = document.getElementById("phishingBtn");
   submitDialogueBtn = document.getElementById("submitDialogueBtn");
 
-  timerElement = document.getElementById("timer");
   userPointsElement = document.getElementById("userPoints");
   currentStreakElement = document.getElementById("currentStreak");
 
@@ -168,21 +165,8 @@ async function loadQuestions() {
       console.log("Generated new questions:", gameState.questions.length);
     }
 
-    // Start the game if it's already in progress
-    const roomRef = doc(db, "rooms", currentRoomId);
-    const roomDoc = await getDoc(roomRef);
-    const roomData = roomDoc.data();
-
-    if (
-      roomData.status === "started" &&
-      roomData.currentQuestion !== undefined
-    ) {
-      gameState.currentQuestion = roomData.currentQuestion;
-      loadCurrentQuestion();
-    } else {
-      // Wait for game to start
-      showWaitingState("بانتظار بدء اللعبة من قبل المضيف...");
-    }
+    // Start the game immediately (single-player)
+    loadCurrentQuestion();
   } catch (error) {
     console.error("Error loading questions:", error);
     throw new Error("فشل في تحميل الأسئلة: " + error.message);
@@ -204,21 +188,6 @@ async function generateQuestions(quizType, count) {
         console.error("Failed to load SMS questions, using fallback:", error);
         const fallbackSMS = generateFallbackQuestions(5, "sms");
         allQuestions = allQuestions.concat(fallbackSMS);
-      }
-    }
-
-    if (quizType === "dialogue" || quizType === "mixed") {
-      try {
-        const dialogueQuestions = await fetchDialogueQuestions(timestamp);
-        allQuestions = allQuestions.concat(dialogueQuestions);
-        console.log("Loaded dialogue questions:", dialogueQuestions.length);
-      } catch (error) {
-        console.error(
-          "Failed to load dialogue questions, using fallback:",
-          error
-        );
-        const fallbackDialogue = generateFallbackQuestions(5, "dialogue");
-        allQuestions = allQuestions.concat(fallbackDialogue);
       }
     }
 
@@ -288,36 +257,6 @@ async function fetchSMSQuestions(timestamp) {
   }
 }
 
-async function fetchDialogueQuestions(timestamp) {
-  try {
-    const response = await fetch(
-      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${timestamp}`
-    );
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (!Array.isArray(data)) {
-      throw new Error("Invalid data format: expected array");
-    }
-
-    return data.map((dialogue, index) => ({
-      id: `dialogue-${timestamp}-${index}`,
-      type: "dialogue",
-      messages: dialogue.messages || [],
-      correctAnswers: dialogue.correctAnswers || [],
-      difficulty: dialogue.difficulty || 2,
-      explanation: dialogue.explanation || "لا توجد تفاصيل إضافية",
-    }));
-  } catch (error) {
-    console.error("Error fetching dialogue questions:", error);
-    throw error; // Re-throw to be handled by caller
-  }
-}
-
 async function fetchImageQuestions(timestamp) {
   try {
     const response = await fetch(
@@ -356,7 +295,7 @@ function generateFallbackQuestions(count, type = "mixed") {
     const isPhishing = Math.random() > 0.5;
     const questionTypes =
       type === "mixed"
-        ? ["sms", "dialogue", "image"][Math.floor(Math.random() * 3)]
+        ? ["sms", "image"][Math.floor(Math.random() * 2)] // Remove dialogue option
         : type;
 
     if (questionTypes === "sms") {
@@ -373,18 +312,6 @@ function generateFallbackQuestions(count, type = "mixed") {
         explanation: isPhishing
           ? "عروض الجوائز الفورية غالباً ما تكون محاولات احتيال"
           : "هذه رسالة أمنة من البنك تحتوي على رقم خدمة عملاء معروف",
-      });
-    } else if (questionTypes === "dialogue") {
-      questions.push({
-        id: `fallback-dialogue-${i}-${Date.now()}`,
-        type: "dialogue",
-        messages: [
-          { sender: "other", text: "مرحباً، هذا عرض خاص لك..." },
-          { sender: "user", text: "شكراً، لكنني لست مهتماً" },
-        ],
-        correctAnswers: ["phishing"],
-        difficulty: 1,
-        explanation: "الرسائل غير الرسمية مع عروض خاصة قد تكون احتيال",
       });
     } else if (questionTypes === "image") {
       questions.push({
@@ -413,7 +340,7 @@ function shuffleArray(array) {
 }
 
 function setupRoomListeners() {
-  // Listen for room updates
+  // Only listen for room updates to track progress
   const roomRef = doc(db, "rooms", currentRoomId);
   onSnapshot(roomRef, (doc) => {
     if (doc.exists()) {
@@ -422,11 +349,7 @@ function setupRoomListeners() {
     }
   });
 
-  // Listen for player answers
-  const answersRef = collection(db, `rooms/${currentRoomId}/answers`);
-  onSnapshot(answersRef, (snapshot) => {
-    updatePlayersList();
-  });
+  // Remove answers listener since we don't need to wait for other players
 }
 
 function handleRoomUpdate(roomData) {
@@ -441,16 +364,11 @@ function handleRoomUpdate(roomData) {
     currentQuestionElement.textContent = gameState.currentQuestion + 1;
   }
 
-  // Handle game status changes
-  if (
-    roomData.status === "started" &&
-    gameState.currentQuestion < gameState.questions.length
-  ) {
+  // Single-player logic - always load current question
+  if (gameState.currentQuestion < gameState.questions.length) {
     loadCurrentQuestion();
   } else if (roomData.status === "ended") {
     showGameOver();
-  } else if (roomData.status === "waiting") {
-    showWaitingState("بانتظار بدء اللعبة من قبل المضيف...");
   }
 }
 
@@ -509,10 +427,6 @@ function loadCurrentQuestion() {
 
   // Reset game state for new question
   gameState.hasAnswered = false;
-  gameState.timer = 30;
-
-  // Update timer display
-  if (timerElement) timerElement.textContent = gameState.timer;
 
   // Show question content
   loadingState.classList.add("hidden");
@@ -520,25 +434,20 @@ function loadCurrentQuestion() {
   waitingState.classList.add("hidden");
   resultsState.classList.add("hidden");
 
-  // Hide all question types first
+  // Hide feedback and all question types first
+  document.getElementById("answerFeedback").classList.add("hidden");
   document.getElementById("smsQuestion").classList.add("hidden");
-  document.getElementById("dialogueQuestion").classList.add("hidden");
   document.getElementById("imageQuestion").classList.add("hidden");
 
   // Show appropriate question type
   if (question.type === "sms") {
     loadSMSQuestion(question);
-  } else if (question.type === "dialogue") {
-    loadDialogueQuestion(question);
   } else if (question.type === "image") {
     loadImageQuestion(question);
   }
 
   // Update difficulty indicator
   updateDifficultyIndicator(question.difficulty);
-
-  // Start timer
-  startTimer();
 
   // Set up answer buttons
   setupAnswerButtons(question);
@@ -551,45 +460,6 @@ function loadSMSQuestion(question) {
   document.getElementById("smsContent").textContent = question.content;
   document.getElementById("smsSender").textContent = question.sender;
   document.getElementById("smsTimestamp").textContent = question.timestamp;
-}
-
-function loadDialogueQuestion(question) {
-  const dialogueQuestion = document.getElementById("dialogueQuestion");
-  dialogueQuestion.classList.remove("hidden");
-
-  const messagesContainer = document.getElementById("dialogueMessages");
-  messagesContainer.innerHTML = "";
-
-  question.messages.forEach((message, index) => {
-    const messageElement = document.createElement("div");
-    messageElement.className = `flex items-start gap-3 ${
-      message.sender === "user" ? "justify-end" : ""
-    }`;
-
-    messageElement.innerHTML = `
-      <div class="flex items-start gap-3 ${
-        message.sender === "user" ? "flex-row-reverse" : ""
-      }">
-        <div class="w-8 h-8 ${
-          message.sender === "user" ? "bg-blue-500" : "bg-gray-500"
-        } rounded-full flex items-center justify-center">
-          <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path>
-          </svg>
-        </div>
-        <div class="flex-1 max-w-xs">
-          <div class="bg-white/10 rounded-lg p-3">
-            <p class="text-white text-sm">${escapeHtml(message.text)}</p>
-          </div>
-        </div>
-      </div>
-    `;
-
-    messagesContainer.appendChild(messageElement);
-  });
-
-  // Show submit button for dialogue questions
-  submitDialogueBtn.classList.remove("hidden");
 }
 
 function loadImageQuestion(question) {
@@ -650,60 +520,28 @@ function setupAnswerButtons(question) {
   safeBtn = newSafeBtn;
   phishingBtn = newPhishingBtn;
 
+  // Enable buttons
+  safeBtn.disabled = false;
+  phishingBtn.disabled = false;
+
   // Add new event listeners
   safeBtn.addEventListener("click", () => handleAnswer("safe", question));
   phishingBtn.addEventListener("click", () =>
     handleAnswer("phishing", question)
   );
 
-  // For dialogue questions, use the submit button
-  if (question.type === "dialogue") {
-    const newSubmitBtn = submitDialogueBtn.cloneNode(true);
-    submitDialogueBtn.parentNode.replaceChild(newSubmitBtn, submitDialogueBtn);
-    submitDialogueBtn = newSubmitBtn;
-
-    submitDialogueBtn.addEventListener("click", () =>
-      handleDialogueAnswer(question)
-    );
-  } else {
-    submitDialogueBtn.classList.add("hidden");
-  }
-}
-
-function startTimer() {
-  // Clear existing timer
-  if (gameState.timerInterval) {
-    clearInterval(gameState.timerInterval);
-  }
-
-  gameState.timerInterval = setInterval(() => {
-    gameState.timer--;
-
-    if (timerElement) {
-      timerElement.textContent = gameState.timer;
-    }
-
-    if (gameState.timer <= 0) {
-      clearInterval(gameState.timerInterval);
-
-      // Auto-submit if player hasn't answered
-      if (!gameState.hasAnswered) {
-        handleAnswer("timeout", gameState.questions[gameState.currentQuestion]);
-      }
-    }
-  }, 1000);
+  // Hide dialogue submit button since we removed dialogue questions
+  submitDialogueBtn.classList.add("hidden");
 }
 
 async function handleAnswer(answer, question) {
   if (gameState.hasAnswered) return;
 
   gameState.hasAnswered = true;
-  clearInterval(gameState.timerInterval);
 
   // Disable answer buttons immediately
   safeBtn.disabled = true;
   phishingBtn.disabled = true;
-  submitDialogueBtn.disabled = true;
 
   try {
     // Calculate if answer is correct
@@ -725,61 +563,64 @@ async function handleAnswer(answer, question) {
     // Save answer to Firestore
     await saveAnswer(answer, isCorrect);
 
-    // Show waiting state for other players
-    showWaitingState("بانتظار إجابات اللاعبين الآخرين...");
+    // Show immediate feedback instead of waiting
+    showAnswerFeedback(isCorrect, question.explanation);
+
+    // Wait a moment then go to next question
+    setTimeout(() => {
+      gameState.currentQuestion++;
+      if (gameState.currentQuestion < gameState.questions.length) {
+        loadCurrentQuestion();
+      } else {
+        showGameOver();
+      }
+    }, 2000); // 2 second delay to show feedback
   } catch (error) {
     console.error("Error handling answer:", error);
-    // Even if saving fails, continue to waiting state
-    showWaitingState("بانتظار إجابات اللاعبين الآخرين...");
+    // Even if saving fails, continue to next question
+    gameState.currentQuestion++;
+    if (gameState.currentQuestion < gameState.questions.length) {
+      loadCurrentQuestion();
+    } else {
+      showGameOver();
+    }
   }
 }
 
-async function handleDialogueAnswer(question) {
-  if (gameState.hasAnswered) return;
+function showAnswerFeedback(isCorrect, explanation) {
+  // Hide question content
+  questionContent.classList.add("hidden");
 
-  gameState.hasAnswered = true;
-  clearInterval(gameState.timerInterval);
+  // Show feedback
+  const feedbackElement = document.getElementById("answerFeedback");
+  const feedbackText = document.getElementById("feedbackText");
+  const explanationText = document.getElementById("explanationText");
 
-  try {
-    // For dialogue questions, we need to check each message
-    // This is a simplified version - you might want to implement a more complex checking mechanism
-    const isCorrect = Math.random() > 0.5; // Placeholder logic
+  if (feedbackElement && feedbackText && explanationText) {
+    feedbackElement.className = `p-6 rounded-lg text-center ${
+      isCorrect
+        ? "bg-green-100 border border-green-400"
+        : "bg-red-100 border border-red-400"
+    }`;
 
-    // Update player score
-    if (isCorrect) {
-      gameState.score += 50;
+    feedbackText.innerHTML = isCorrect
+      ? '<span class="text-green-800 font-bold">✓ إجابة صحيحة!</span>'
+      : '<span class="text-red-800 font-bold">✗ إجابة خاطئة</span>';
 
-      // Update streak
-      const currentStreak = parseInt(currentStreakElement.textContent) || 0;
-      currentStreakElement.textContent = currentStreak + 1;
+    explanationText.textContent = explanation || "لا توجد تفاصيل إضافية";
 
-      // Update points
-      const currentPoints = parseInt(userPointsElement.textContent) || 0;
-      userPointsElement.textContent = currentPoints + 50;
-    }
-
-    // Save answer to Firestore
-    await saveAnswer("dialogue", isCorrect);
-
-    // Show waiting state for other players
-    showWaitingState("بانتظار إجابات اللاعبين الآخرين...");
-  } catch (error) {
-    console.error("Error handling dialogue answer:", error);
-    showWaitingState("بانتظار إجابات اللاعبين الآخرين...");
+    feedbackElement.classList.remove("hidden");
   }
 }
 
 async function saveAnswer(answer, isCorrect) {
   try {
     const answersRef = collection(db, `rooms/${currentRoomId}/answers`);
-
-    // Create a document for this question's answer
     const answerDoc = doc(
       answersRef,
       `${currentUser.uid}_${gameState.currentQuestion}`
     );
 
-    // Use setDoc to create the document (this will work for new documents)
     await setDoc(answerDoc, {
       userId: currentUser.uid,
       userName: currentUser.displayName || "لاعب",
@@ -790,49 +631,9 @@ async function saveAnswer(answer, isCorrect) {
     });
 
     console.log("Answer saved successfully");
-
-    // Also update the player's score in the room
-    const roomRef = doc(db, "rooms", currentRoomId);
-    const roomDoc = await getDoc(roomRef);
-
-    if (roomDoc.exists()) {
-      const roomData = roomDoc.data();
-      const updatedPlayers = roomData.players.map((player) => {
-        if (player.uid === currentUser.uid) {
-          return {
-            ...player,
-            score: (player.score || 0) + (isCorrect ? 50 : 0),
-          };
-        }
-        return player;
-      });
-
-      await updateDoc(roomRef, {
-        players: updatedPlayers,
-      });
-
-      console.log("Player score updated");
-    }
   } catch (error) {
     console.error("Error saving answer:", error);
-    // Don't throw the error here, just log it
   }
-}
-
-function showWaitingState(message) {
-  loadingState.classList.add("hidden");
-  questionContent.classList.add("hidden");
-  waitingState.classList.remove("hidden");
-  resultsState.classList.add("hidden");
-
-  const waitingText = document.getElementById("waitingText");
-  if (waitingText) waitingText.textContent = message;
-}
-
-function showResults() {
-  // This would show results for the current question
-  // Implementation depends on how you want to display results
-  console.log("Showing results for question", gameState.currentQuestion);
 }
 
 function showGameOver() {
