@@ -1,4 +1,4 @@
-// room-game.js - Modified to work like older quiz system
+// room-game.js - Simplified like older quiz system but for rooms
 import { auth, db } from "./firebase-init.js";
 import {
   doc,
@@ -28,6 +28,7 @@ const roomId = urlParams.get("roomId");
 
 let msgCard, qIndex, qTotal, bar, feedback, nextBtn, finishBtn, leaderboard;
 let currentQuizType = "mixed";
+let totalQuestions = 10;
 
 document.addEventListener("DOMContentLoaded", function () {
   msgCard = document.querySelector("#msgCard");
@@ -69,7 +70,7 @@ async function initializeRoomGame() {
       return;
     }
 
-    // Get room data to determine quiz type
+    // Get room data to determine quiz type and question count
     const roomDoc = await getDoc(doc(db, "rooms", roomId));
     if (!roomDoc.exists()) {
       msgCard.innerHTML = "<p>Room not found.</p>";
@@ -78,6 +79,7 @@ async function initializeRoomGame() {
 
     const roomData = roomDoc.data();
     currentQuizType = roomData.quizType || "mixed";
+    totalQuestions = roomData.questionCount || 10;
 
     // Join the room as player if not already joined
     await setDoc(doc(db, `rooms/${roomId}/players`, auth.currentUser.uid), {
@@ -134,15 +136,17 @@ async function loadScenarios() {
     const response = await fetch(quizUrl + "?v=" + Date.now());
     if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
     const text = await response.text();
-    scenarios = JSON.parse(text);
+    let allScenarios = JSON.parse(text);
 
-    if (scenarios.length === 0) {
+    if (allScenarios.length === 0) {
       msgCard.innerHTML = "<p>No scenarios available.</p>";
       return;
     }
 
-    qTotal.textContent = scenarios.length;
-    shuffle(scenarios);
+    // Shuffle and take the exact number of questions the host selected
+    scenarios = shuffle(allScenarios).slice(0, totalQuestions);
+    qTotal.textContent = totalQuestions;
+
     load();
   } catch (error) {
     msgCard.innerHTML = "<p>Error loading scenarios: " + error.message + "</p>";
@@ -152,6 +156,11 @@ async function loadScenarios() {
 
 function load() {
   questionStartTime = Date.now();
+
+  if (index >= scenarios.length) {
+    finish();
+    return;
+  }
 
   if (currentQuizType === "dialogue") {
     loadDialogueScenario();
@@ -325,19 +334,26 @@ window.choose = async function (msgIndex, isPhish) {
       ? scenario.messages[msgIndex].isPhish
       : scenario.isPhish;
 
+  // Show feedback like older system
   feedback.textContent = `${correct ? "Correct" : "Not quite"} — This is ${
     isPhishing ? "phishing" : "safe"
-  }.`;
+  }. ${scenario.explanation || ""}`;
   feedback.classList.toggle("bad", !correct);
   feedback.classList.remove("hidden");
 
-  const lastScenario = index === scenarios.length - 1;
-  (lastScenario ? finishBtn : nextBtn).classList.remove("hidden");
+  // Auto-progress to next question after 1 second (like older system)
+  setTimeout(() => {
+    next();
+  }, 1000);
 };
 
 window.next = function () {
   index++;
-  if (index < scenarios.length) load();
+  if (index < scenarios.length) {
+    load();
+  } else {
+    finish();
+  }
 };
 
 window.finish = async function () {
@@ -398,11 +414,12 @@ async function updateScore(uid, points) {
   }
 }
 
-function shuffle(a) {
-  for (let i = a.length - 1; i > 0; i--) {
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+    [array[i], array[j]] = [array[j], array[i]];
   }
+  return array;
 }
 
 function showAchievementNotification(achievementNames) {
