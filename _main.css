@@ -1658,6 +1658,37 @@ pre {
     transform: translateY(-2px);
     transition: transform 0.2s ease;
 }
+/* Footer Styles */
+footer a {
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+footer a:hover {
+    transform: translateX(-5px);
+}
+
+footer li a:before {
+    content: "•";
+    color: #3b82f6;
+    margin-left: 8px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+footer li a:hover:before {
+    opacity: 1;
+}
+
+/* Social media icons hover effects */
+footer .social-icon {
+    transition: all 0.3s ease;
+    transform: scale(1);
+}
+
+footer .social-icon:hover {
+    transform: scale(1.1);
+}
 .from-blue-500 {
     --tw-gradient-from: #3b82f6 var(--tw-gradient-from-position);
     --tw-gradient-to: rgb(59 130 246 / 0) var(--tw-gradient-to-position);
