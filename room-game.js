@@ -1,4 +1,4 @@
-// room-game.js - Updated version
+// room-game.js - Fixed version
 import { auth, db } from "./firebase-init.js";
 import {
   doc,
@@ -6,10 +6,8 @@ import {
   updateDoc,
   onSnapshot,
   collection,
-  query,
-  where,
+  getDocs,
   serverTimestamp,
-  arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 class RoomGame {
@@ -32,67 +30,56 @@ class RoomGame {
   }
 
   async init() {
+    console.log("Initializing RoomGame...");
+
     // Get room ID from URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     this.roomId = urlParams.get("roomId");
     this.userId = auth.currentUser?.uid;
 
-    if (!this.roomId || !this.userId) {
-      this.showError("معرف الغرفة أو المستخدم غير صحيح");
+    console.log("Room ID from URL:", this.roomId);
+    console.log("User ID:", this.userId);
+    console.log("Full URL:", window.location.href);
+
+    if (!this.roomId) {
+      this.showError("معرف الغرفة غير موجود في الرابط");
+      return;
+    }
+
+    if (!this.userId) {
+      this.showError("لم يتم العثور على مستخدم مسجل الدخول");
       return;
     }
 
     this.setupEventListeners();
     await this.loadRoomData();
-    this.setupRealtimeListeners();
-  }
-
-  setupEventListeners() {
-    // Answer buttons
-    document.querySelectorAll(".answer-btn").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        if (this.hasAnswered) return;
-        const answer = e.currentTarget.getAttribute("data-answer");
-        this.handleAnswer(answer);
-      });
-    });
-
-    // Dialogue submit button
-    document.getElementById("submitDialogue")?.addEventListener("click", () => {
-      if (this.hasAnswered) return;
-      this.handleDialogueAnswer();
-    });
-
-    // Game over buttons
-    document.getElementById("playAgainBtn")?.addEventListener("click", () => {
-      window.location.reload();
-    });
-
-    document
-      .getElementById("backToDashboard")
-      ?.addEventListener("click", () => {
-        window.location.href = "dashboard.html";
-      });
   }
 
   async loadRoomData() {
     try {
+      console.log("Loading room data for room:", this.roomId);
+
       const roomRef = doc(db, "rooms", this.roomId);
       const roomDoc = await getDoc(roomRef);
 
       if (!roomDoc.exists()) {
-        this.showError("لم يتم العثور على الغرفة");
+        this.showError("لم يتم العثور على الغرفة في قاعدة البيانات");
         return;
       }
 
       this.roomData = roomDoc.data();
+      console.log("Room data loaded:", this.roomData);
+
       this.quizType = this.roomData.quizType || "mixed";
       this.totalQuestions = this.roomData.questionCount || 10;
 
       // Update UI with room info
       this.updateRoomInfo();
 
-      // Load questions based on quiz type
+      // Setup real-time listeners
+      this.setupRealtimeListeners();
+
+      // Load questions
       await this.loadQuestions();
 
       // Hide loading overlay
@@ -101,129 +88,34 @@ class RoomGame {
       // Start the game if it's already started
       if (this.roomData.status === "started") {
         this.startGame();
+      } else {
+        this.showWaitingMessage("بانتظار بدء اللعبة من قبل المضيف...");
       }
     } catch (error) {
       console.error("Error loading room data:", error);
-      this.showError("فشل تحميل بيانات الغرفة");
+      this.showError("فشل تحميل بيانات الغرفة: " + error.message);
     }
   }
 
-  async loadQuestions() {
-    try {
-      const now = Date.now();
-      let questions = [];
+  updateRoomInfo() {
+    // Update room title and code
+    const roomTitle = document.getElementById("roomTitle");
+    const roomCodeDisplay = document.getElementById("roomCodeDisplay");
 
-      // Load questions based on quiz type
-      switch (this.quizType) {
-        case "sms":
-          questions = await this.loadSMSQuestions(now);
-          break;
-        case "dialogue":
-          questions = await this.loadDialogueQuestions(now);
-          break;
-        case "image":
-          questions = await this.loadImageQuestions(now);
-          break;
-        case "mixed":
-        default:
-          questions = await this.loadMixedQuestions(now);
-          break;
-      }
-
-      this.questions = questions.slice(0, this.totalQuestions);
-
-      if (this.questions.length === 0) {
-        this.questions = this.generateSampleQuestions();
-        this.showToast("تم استخدام أسئلة تجريبية", "warning");
-      }
-    } catch (error) {
-      console.error("Error loading questions:", error);
-      this.questions = this.generateSampleQuestions();
-      this.showToast(
-        "تم استخدام أسئلة تجريبية بسبب مشكلة في التحميل",
-        "warning"
-      );
+    if (roomTitle) {
+      roomTitle.textContent = this.roomData?.roomName || "غرفة التدريب";
     }
-  }
 
-  async loadSMSQuestions(timestamp) {
-    const response = await fetch(
-      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${timestamp}`
-    );
-    if (!response.ok) throw new Error("Failed to fetch SMS questions");
-
-    const data = await response.json();
-    return data.map((sms, index) => ({
-      id: index + 1,
-      type: "sms",
-      content: sms.text,
-      sender: sms.sender || "جهة مجهولة",
-      timestamp: "الآن",
-      correctAnswer: sms.isPhish ? "phishing" : "safe",
-      difficulty: sms.difficulty || 2,
-      explanation: sms.explanation || "لا توجد تفاصيل إضافية",
-    }));
-  }
-
-  async loadDialogueQuestions(timestamp) {
-    const response = await fetch(
-      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${timestamp}`
-    );
-    if (!response.ok) throw new Error("Failed to fetch dialogue questions");
-
-    const data = await response.json();
-    return data.map((dialogue, index) => ({
-      id: index + 1,
-      type: "dialogue",
-      messages: dialogue.messages || [],
-      correctAnswers: dialogue.correctAnswers || [],
-      difficulty: dialogue.difficulty || 2,
-      explanation: dialogue.explanation || "لا توجد تفاصيل إضافية",
-    }));
-  }
-
-  async loadImageQuestions(timestamp) {
-    const response = await fetch(
-      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${timestamp}`
-    );
-    if (!response.ok) throw new Error("Failed to fetch image questions");
-
-    const data = await response.json();
-    return data.map((image, index) => ({
-      id: index + 1,
-      type: "image",
-      imageUrl: image.url,
-      description: image.description || "",
-      correctAnswer: image.isPhish ? "phishing" : "safe",
-      difficulty: image.difficulty || 2,
-      explanation: image.explanation || "لا توجد تفاصيل إضافية",
-    }));
-  }
-
-  async loadMixedQuestions(timestamp) {
-    const [smsQuestions, dialogueQuestions, imageQuestions] = await Promise.all(
-      [
-        this.loadSMSQuestions(timestamp).catch(() => []),
-        this.loadDialogueQuestions(timestamp).catch(() => []),
-        this.loadImageQuestions(timestamp).catch(() => []),
-      ]
-    );
-
-    // Combine and shuffle questions
-    const allQuestions = [
-      ...smsQuestions,
-      ...dialogueQuestions,
-      ...imageQuestions,
-    ];
-    return this.shuffleArray(allQuestions);
-  }
-
-  shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [array[i], array[j]] = [array[j], array[i]];
+    if (roomCodeDisplay) {
+      roomCodeDisplay.textContent = `رمز: ${this.roomId}`;
     }
-    return array;
+
+    // Update user points and streak
+    const userPoints = document.getElementById("userPoints");
+    const currentStreak = document.getElementById("currentStreak");
+
+    if (userPoints) userPoints.textContent = this.userScore;
+    if (currentStreak) currentStreak.textContent = this.currentStreak;
   }
 
   setupRealtimeListeners() {
@@ -231,6 +123,7 @@ class RoomGame {
     onSnapshot(doc(db, "rooms", this.roomId), (doc) => {
       if (doc.exists()) {
         const newData = doc.data();
+        console.log("Room updated:", newData);
         this.handleRoomUpdate(newData);
       }
     });
@@ -238,6 +131,7 @@ class RoomGame {
     // Listen to players changes
     onSnapshot(collection(db, `rooms/${this.roomId}/players`), (snapshot) => {
       this.players = snapshot.docs.map((doc) => doc.data());
+      console.log("Players updated:", this.players);
       this.updatePlayersStatus();
     });
   }
@@ -246,7 +140,10 @@ class RoomGame {
     this.roomData = newData;
 
     // Handle game state changes
-    if (newData.status === "started" && this.roomData.status !== "started") {
+    if (
+      newData.status === "started" &&
+      (!this.roomData.status || this.roomData.status !== "started")
+    ) {
       this.startGame();
     } else if (newData.status === "ended") {
       this.endGame();
@@ -263,7 +160,45 @@ class RoomGame {
     this.updateRoomInfo();
   }
 
+  async loadQuestions() {
+    try {
+      console.log("Loading questions for room:", this.roomId);
+
+      // Try to load questions from the room's questions collection
+      const questionsRef = collection(db, `rooms/${this.roomId}/questions`);
+      const questionsSnapshot = await getDocs(questionsRef);
+
+      if (!questionsSnapshot.empty) {
+        // Load questions from the room's specific collection
+        this.questions = questionsSnapshot.docs
+          .map((doc) => doc.data())
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+
+        console.log(`Loaded ${this.questions.length} room-specific questions`);
+        return;
+      }
+
+      console.log("No room-specific questions found, using fallback questions");
+      // Use fallback questions
+      this.questions = this.generateSampleQuestions().slice(
+        0,
+        this.totalQuestions
+      );
+    } catch (error) {
+      console.error("Error loading questions:", error);
+      this.questions = this.generateSampleQuestions().slice(
+        0,
+        this.totalQuestions
+      );
+      this.showToast(
+        "تم استخدام أسئلة تجريبية بسبب مشكلة في التحميل",
+        "warning"
+      );
+    }
+  }
+
   startGame() {
+    console.log("Starting game...");
     this.currentQuestionIndex = this.roomData.currentQuestion || 0;
     this.loadQuestion();
     this.startTimer();
@@ -277,6 +212,8 @@ class RoomGame {
 
     const question = this.questions[this.currentQuestionIndex];
     this.hasAnswered = false;
+
+    console.log("Loading question:", question);
 
     // Hide all states
     this.hideElement("loadingState");
@@ -298,37 +235,50 @@ class RoomGame {
       case "image":
         this.showImageQuestion(question);
         break;
+      default:
+        this.showSMSQuestion(question); // Default to SMS
+        break;
     }
 
     this.updateQuestionProgress();
-    this.updateDifficultyIndicator(question.difficulty);
+    this.updateDifficultyIndicator(question.difficulty || 2);
   }
 
   showSMSQuestion(question) {
     this.showElement("smsQuestion");
-    document.getElementById("smsContent").textContent = question.content;
-    document.getElementById("smsSender").textContent = question.sender;
-    document.getElementById("smsTimestamp").textContent = question.timestamp;
+    if (document.getElementById("smsContent")) {
+      document.getElementById("smsContent").textContent = question.content;
+    }
+    if (document.getElementById("smsSender")) {
+      document.getElementById("smsSender").textContent =
+        question.sender || "جهة مجهولة";
+    }
+    if (document.getElementById("smsTimestamp")) {
+      document.getElementById("smsTimestamp").textContent =
+        question.timestamp || "الآن";
+    }
   }
 
   showDialogueQuestion(question) {
     this.showElement("dialogueQuestion");
     const messagesContainer = document.getElementById("dialogueMessages");
-    messagesContainer.innerHTML = "";
+    if (messagesContainer) {
+      messagesContainer.innerHTML = "";
 
-    question.messages.forEach((msg, index) => {
-      const messageElement = document.createElement("div");
-      messageElement.className = `flex ${
-        msg.isUser ? "justify-start" : "justify-end"
-      }`;
-      messageElement.innerHTML = `
-        <div class="max-w-xs bg-white/10 rounded-lg p-3">
-          <p class="text-white">${msg.text}</p>
-          <p class="text-blue-200 text-xs mt-1">${msg.time}</p>
-        </div>
-      `;
-      messagesContainer.appendChild(messageElement);
-    });
+      (question.messages || []).forEach((msg, index) => {
+        const messageElement = document.createElement("div");
+        messageElement.className = `flex ${
+          msg.isUser ? "justify-start" : "justify-end"
+        }`;
+        messageElement.innerHTML = `
+          <div class="max-w-xs bg-white/10 rounded-lg p-3">
+            <p class="text-white">${msg.text || "رسالة"}</p>
+            <p class="text-blue-200 text-xs mt-1">${msg.time || "الآن"}</p>
+          </div>
+        `;
+        messagesContainer.appendChild(messageElement);
+      });
+    }
 
     // Show submit button for dialogue questions
     this.showElement("submitDialogue");
@@ -337,10 +287,16 @@ class RoomGame {
   showImageQuestion(question) {
     this.showElement("imageQuestion");
     const imgElement = document.getElementById("questionImage");
-    imgElement.src = question.imageUrl;
-    imgElement.alt = question.description;
-    document.getElementById("imageDescription").textContent =
-      question.description;
+    if (imgElement) {
+      imgElement.src =
+        question.imageUrl ||
+        "https://images.unsplash.com/photo-1584824486509-112e4181ff6b?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
+      imgElement.alt = question.description || "صورة السؤال";
+    }
+    if (document.getElementById("imageDescription")) {
+      document.getElementById("imageDescription").textContent =
+        question.description || "";
+    }
   }
 
   async handleAnswer(answer) {
@@ -514,14 +470,6 @@ class RoomGame {
     this.hideElement("submitDialogue");
   }
 
-  updateRoomInfo() {
-    document.getElementById("roomName").textContent =
-      this.roomData?.roomName || "غرفة التدريب";
-    document.getElementById("quizType").textContent = this.getQuizTypeName(
-      this.quizType
-    );
-  }
-
   updateQuestionProgress() {
     document.getElementById("currentQuestion").textContent =
       this.currentQuestionIndex + 1;
@@ -584,11 +532,51 @@ class RoomGame {
   }
 
   hideLoading() {
-    document.getElementById("loadingOverlay")?.classList.add("hidden");
+    const loadingOverlay = document.getElementById("loadingOverlay");
+    if (loadingOverlay) {
+      loadingOverlay.style.display = "none";
+    }
+  }
+
+  showWaitingMessage(message) {
+    this.hideElement("loadingState");
+    this.hideElement("questionContent");
+    this.hideElement("resultsState");
+
+    const waitingState = document.getElementById("waitingState");
+    const waitingText = document.getElementById("waitingText");
+
+    if (waitingState && waitingText) {
+      waitingText.textContent = message;
+      this.showElement("waitingState");
+    }
   }
 
   showError(message) {
-    alert(message);
+    // Replace alert with a better error display
+    const errorDiv = document.createElement("div");
+    errorDiv.className =
+      "fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white p-4 rounded-lg z-50";
+    errorDiv.innerHTML = `
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+        </svg>
+        <span>${message}</span>
+      </div>
+    `;
+
+    document.body.appendChild(errorDiv);
+
+    setTimeout(() => {
+      if (document.body.contains(errorDiv)) {
+        document.body.removeChild(errorDiv);
+      }
+      // Redirect to dashboard after error
+      setTimeout(() => {
+        window.location.href = "dashboard.html";
+      }, 2000);
+    }, 5000);
   }
 
   showToast(message, type = "info") {
@@ -635,5 +623,13 @@ class RoomGame {
 
 // Initialize the game when the page loads
 document.addEventListener("DOMContentLoaded", () => {
-  new RoomGame();
+  // Check if user is authenticated
+  auth.onAuthStateChanged((user) => {
+    if (!user) {
+      window.location.href = "newlogin.html";
+      return;
+    }
+
+    new RoomGame();
+  });
 });

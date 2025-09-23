@@ -330,6 +330,11 @@
     <p id="imageDescription" class="text-white text-lg text-center"></p>
   </div>
 </div>
+<script>
+console.log("Room page loaded");
+console.log("URL parameters:", new URLSearchParams(window.location.search).toString());
+console.log("Current user:", auth?.currentUser);
+</script>
         <script type="module" src="room-game.js"></script>
             <script type="module" src="firebase-init.js"></script>
 

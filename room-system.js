@@ -15,6 +15,7 @@ import {
   getDoc,
   arrayUnion,
   arrayRemove,
+  deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Room state management
@@ -344,9 +345,19 @@ function setupRoomListeners(
         }
       }
 
-      // Handle room status changes
+      // Handle room status changes - redirect players when game starts
       if (roomData.status === "started") {
-        navigateToGamePage(roomId, roomData.quizType);
+        if (userIsHost) {
+          // Host gets redirected immediately
+          setTimeout(() => {
+            window.location.href = `room.html?roomId=${roomId}`;
+          }, 1000);
+        } else {
+          // Players get redirected after a short delay
+          setTimeout(() => {
+            window.location.href = `room.html?roomId=${roomId}`;
+          }, 1500);
+        }
       } else if (roomData.status === "ended") {
         showResultsModal(roomId);
       }
@@ -400,6 +411,264 @@ function setupRoomListeners(
   );
 }
 
+// --- Start Game ---
+async function startGame(roomId) {
+  try {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    // Get room data to ensure host is starting the game
+    const roomRef = doc(db, "rooms", roomId);
+    const roomDoc = await getDoc(roomRef);
+
+    if (!roomDoc.exists()) {
+      showToast("الغرفة غير موجودة", "error");
+      return;
+    }
+
+    const roomData = roomDoc.data();
+
+    // Check if user is the host
+    if (roomData.hostId !== user.uid) {
+      showToast("فقط المضيف يمكنه بدء اللعبة", "error");
+      return;
+    }
+
+    // Check if there are enough players (at least 2)
+    if (roomData.players.length < 2) {
+      showToast("يحتاج على الأقل لاعبين لبدء اللعبة", "warning");
+      return;
+    }
+
+    // Check if all players are ready
+    const readyPlayers = roomData.players.filter((p) => p.isReady);
+    if (readyPlayers.length !== roomData.players.length) {
+      showToast("يجب أن يكون جميع اللاعبين مستعدين", "warning");
+      return;
+    }
+
+    // Generate questions for this room
+    await generateRoomQuestions(
+      roomId,
+      roomData.quizType,
+      roomData.questionCount
+    );
+
+    // Update room status to started
+    await updateDoc(roomRef, {
+      status: "started",
+      startedAt: serverTimestamp(),
+      currentQuestion: 0,
+    });
+
+    showToast("تم بدء اللعبة! سيتم تحويل جميع اللاعبين إلى الغرفة", "success");
+  } catch (error) {
+    console.error("Error starting game:", error);
+    showToast("فشل في بدء اللعبة: " + error.message, "error");
+  }
+}
+
+// --- Generate Room Questions ---
+async function generateRoomQuestions(roomId, quizType, questionCount) {
+  try {
+    // Create a unique seed based on room ID and current date
+    const seed = roomId + new Date().toISOString().split("T")[0];
+    const questionsRef = collection(db, `rooms/${roomId}/questions`);
+
+    // Clear existing questions
+    const existingQuestions = await getDocs(questionsRef);
+    const deletePromises = existingQuestions.docs.map((doc) =>
+      deleteDoc(doc.ref)
+    );
+    await Promise.all(deletePromises);
+
+    // Load questions based on quiz type
+    let questions = [];
+    const timestamp = Date.now();
+
+    switch (quizType) {
+      case "sms":
+        questions = await loadSMSQuestions(timestamp);
+        break;
+      case "dialogue":
+        questions = await loadDialogueQuestions(timestamp);
+        break;
+      case "image":
+        questions = await loadImageQuestions(timestamp);
+        break;
+      case "mixed":
+      default:
+        const [sms, dialogue, image] = await Promise.all([
+          loadSMSQuestions(timestamp).catch(() => []),
+          loadDialogueQuestions(timestamp).catch(() => []),
+          loadImageQuestions(timestamp).catch(() => []),
+        ]);
+        questions = [...sms, ...dialogue, ...image];
+        break;
+    }
+
+    // Shuffle questions using room-specific seed for consistency
+    questions = shuffleArrayWithSeed(questions, seed);
+
+    // Take the required number of questions
+    questions = questions.slice(0, questionCount);
+
+    // Add questions to Firestore
+    for (let i = 0; i < questions.length; i++) {
+      await addDoc(questionsRef, {
+        ...questions[i],
+        order: i,
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    console.log(`Generated ${questions.length} questions for room ${roomId}`);
+  } catch (error) {
+    console.error("Error generating questions:", error);
+    // Fallback to sample questions
+    await generateSampleQuestions(roomId, questionCount);
+  }
+}
+
+// --- Helper function to shuffle with seed ---
+function shuffleArrayWithSeed(array, seed) {
+  const random = seededRandom(seed);
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+// --- Seeded random number generator ---
+function seededRandom(seed) {
+  let x = Math.sin(seed.hashCode()) * 10000;
+  return x - Math.floor(x);
+}
+
+// Add hashCode function to String prototype for seed generation
+String.prototype.hashCode = function () {
+  let hash = 0;
+  for (let i = 0; i < this.length; i++) {
+    const char = this.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash;
+};
+
+// --- Load questions from external sources ---
+async function loadSMSQuestions(timestamp) {
+  try {
+    const response = await fetch(
+      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${timestamp}`
+    );
+    if (!response.ok) throw new Error("Failed to fetch SMS questions");
+    const data = await response.json();
+    return data.map((sms, index) => ({
+      id: `sms-${index}`,
+      type: "sms",
+      content: sms.text,
+      sender: sms.sender || "جهة مجهولة",
+      timestamp: "الآن",
+      correctAnswer: sms.isPhish ? "phishing" : "safe",
+      difficulty: sms.difficulty || 2,
+      explanation: sms.explanation || "لا توجد تفاصيل إضافية",
+    }));
+  } catch (error) {
+    console.error("Error loading SMS questions:", error);
+    return [];
+  }
+}
+
+async function loadDialogueQuestions(timestamp) {
+  try {
+    const response = await fetch(
+      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${timestamp}`
+    );
+    if (!response.ok) throw new Error("Failed to fetch dialogue questions");
+    const data = await response.json();
+    return data.map((dialogue, index) => ({
+      id: `dialogue-${index}`,
+      type: "dialogue",
+      messages: dialogue.messages || [],
+      correctAnswers: dialogue.correctAnswers || [],
+      difficulty: dialogue.difficulty || 2,
+      explanation: dialogue.explanation || "لا توجد تفاصيل إضافية",
+    }));
+  } catch (error) {
+    console.error("Error loading dialogue questions:", error);
+    return [];
+  }
+}
+
+async function loadImageQuestions(timestamp) {
+  try {
+    const response = await fetch(
+      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${timestamp}`
+    );
+    if (!response.ok) throw new Error("Failed to fetch image questions");
+    const data = await response.json();
+    return data.map((image, index) => ({
+      id: `image-${index}`,
+      type: "image",
+      imageUrl: image.url,
+      description: image.description || "",
+      correctAnswer: image.isPhish ? "phishing" : "safe",
+      difficulty: image.difficulty || 2,
+      explanation: image.explanation || "لا توجد تفاصيل إضافية",
+    }));
+  } catch (error) {
+    console.error("Error loading image questions:", error);
+    return [];
+  }
+}
+
+// --- Generate sample questions as fallback ---
+async function generateSampleQuestions(roomId, questionCount) {
+  const questionsRef = collection(db, `rooms/${roomId}/questions`);
+  const sampleQuestions = [
+    {
+      type: "sms",
+      content:
+        "عزيزي العميل، لديك رصيد مجاني 10 دينار. لاستلامه اضغط على الرابط: bit.ly/free-balance",
+      sender: "اتصالات",
+      timestamp: "الآن",
+      correctAnswer: "phishing",
+      difficulty: 2,
+      explanation: "هذه رسالة تصيد تحتوي على رابط مختصر مشبوه",
+    },
+    {
+      type: "sms",
+      content:
+        "إشعار من البنك: تمت عملية سحب بمبلغ 500 دينار. إذا لم تكن أنت، اتصل بنا فوراً على 198",
+      sender: "البنك الأهلي",
+      timestamp: "2 دقيقة",
+      correctAnswer: "safe",
+      difficulty: 1,
+      explanation: "هذه رسالة أمنة من البنك تحتوي على رقم خدمة عملاء معروف",
+    },
+    {
+      type: "sms",
+      content:
+        "مبروك! فزت بجائزة 10000 دينار. اضغط هنا لاستلام جائزتك: winprize.com",
+      sender: "مسابقة",
+      timestamp: "5 دقائق",
+      correctAnswer: "phishing",
+      difficulty: 1,
+      explanation: "عروض الجوائز الفورية غالباً ما تكون محاولات احتيال",
+    },
+  ].slice(0, questionCount);
+
+  for (let i = 0; i < sampleQuestions.length; i++) {
+    await addDoc(questionsRef, {
+      ...sampleQuestions[i],
+      order: i,
+      createdAt: serverTimestamp(),
+    });
+  }
+}
+
 // Toggle ready status for players - FIXED VERSION
 async function toggleReadyStatus(roomId) {
   const user = auth.currentUser;
@@ -446,32 +715,6 @@ function getQuizTypeName(quizType) {
     mixed: "كوكتيل أسئلة",
   };
   return types[quizType] || quizType;
-}
-
-// --- Start Game ---
-async function startGame(roomId) {
-  try {
-    await updateDoc(doc(db, "rooms", roomId), {
-      status: "started",
-      startedAt: serverTimestamp(),
-      currentQuestion: 0,
-    });
-
-    // Navigate to game page
-    navigateToGamePage(roomId);
-  } catch (error) {
-    console.error("Error starting game:", error);
-    showToast("فشل في بدء اللعبة", "error");
-  }
-}
-
-// --- Navigate to Game Page ---
-function navigateToGamePage(roomId, quizType = null) {
-  closeAllModals();
-
-  setTimeout(() => {
-    window.location.href = `room.html?roomId=${roomId}`;
-  }, 500);
 }
 
 // --- Share Room ID ---
