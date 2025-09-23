@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   updateDoc,
+  setDoc, // Add this import
   onSnapshot,
   collection,
   getDocs,
@@ -697,8 +698,8 @@ async function saveAnswer(answer, isCorrect) {
       `${currentUser.uid}_${gameState.currentQuestion}`
     );
 
-    // Use setDoc instead of updateDoc to create the document if it doesn't exist
-    await setDoc(answerDoc, {
+    // Use updateDoc with merge to create the document if it doesn't exist
+    await updateDoc(answerDoc, {
       userId: currentUser.uid,
       userName: currentUser.displayName || "لاعب",
       questionIndex: gameState.currentQuestion,
@@ -706,7 +707,6 @@ async function saveAnswer(answer, isCorrect) {
       isCorrect: isCorrect,
       timestamp: serverTimestamp(),
     });
-
     // Also update the player's score in the room
     const roomRef = doc(db, "rooms", currentRoomId);
     const roomDoc = await getDoc(roomRef);
