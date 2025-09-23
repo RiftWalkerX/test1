@@ -1,3 +1,4 @@
+// room-invites.js - Fixed version with proper imports
 import { db, auth } from "./firebase-init.js";
 import {
   collection,
@@ -9,6 +10,8 @@ import {
   updateDoc,
   onSnapshot,
   getDoc,
+  arrayUnion, // ADD THIS IMPORT
+  serverTimestamp, // ADD THIS IMPORT
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // --- SEND ROOM INVITE ---
@@ -117,7 +120,7 @@ export const loadRoomInvites = async function () {
                   invite.quizType || "تدريب جماعي"
                 }</h5>
                 <p class="text-purple-200 text-sm">دعوة من ${
-                  fromUserData.fromUserName || "مستخدم"
+                  fromUserData.displayName || "مستخدم" // FIXED: fromUserData.fromUserName should be fromUserData.displayName
                 }</p>
               </div>
             </div>
@@ -155,7 +158,6 @@ export const loadRoomInvites = async function () {
 };
 
 // --- HANDLE ROOM INVITE ACTIONS ---
-// --- HANDLE ROOM INVITE ACTIONS ---
 window.acceptRoomInvite = async function (inviteId, roomId) {
   try {
     const user = auth.currentUser;
@@ -173,31 +175,31 @@ window.acceptRoomInvite = async function (inviteId, roomId) {
       // Mark invite as expired
       await updateDoc(doc(db, "roomInvites", inviteId), {
         status: "expired",
-        respondedAt: serverTimestamp()
+        respondedAt: serverTimestamp(),
       });
       await loadRoomInvites();
       return;
     }
 
     const roomData = roomDoc.data();
-    
+
     if (roomData.status !== "waiting") {
       showToast("لا يمكن الانضمام إلى هذه الغرفة حالياً", "error");
       await updateDoc(doc(db, "roomInvites", inviteId), {
-        status: "expired", 
-        respondedAt: serverTimestamp()
+        status: "expired",
+        respondedAt: serverTimestamp(),
       });
       await loadRoomInvites();
       return;
     }
 
     // Check if user is already in the room
-    const existingPlayer = roomData.players.find(p => p.uid === user.uid);
+    const existingPlayer = roomData.players.find((p) => p.uid === user.uid);
     if (existingPlayer) {
       showToast("أنت بالفعل في هذه الغرفة", "info");
       await updateDoc(doc(db, "roomInvites", inviteId), {
         status: "accepted",
-        respondedAt: serverTimestamp()
+        respondedAt: serverTimestamp(),
       });
       // Navigate to lobby instead of directly to room
       window.location.href = `dashboard.html?joinRoom=${roomId}`;
@@ -215,35 +217,38 @@ window.acceptRoomInvite = async function (inviteId, roomId) {
     };
 
     await updateDoc(roomRef, {
-      players: arrayUnion(playerData)
+      players: arrayUnion(playerData),
     });
 
     // Add to players subcollection
     await setDoc(doc(db, `rooms/${roomId}/players`, user.uid), {
       ...playerData,
-      joinedAt: serverTimestamp()
+      joinedAt: serverTimestamp(),
     });
 
     // Update invite status
     await updateDoc(doc(db, "roomInvites", inviteId), {
       status: "accepted",
-      respondedAt: serverTimestamp()
+      respondedAt: serverTimestamp(),
     });
 
     showToast("تم الانضمام إلى الغرفة بنجاح!", "success");
-    
+
     // Navigate to dashboard with room parameter to open lobby
     window.location.href = `dashboard.html?joinRoom=${roomId}`;
-
   } catch (error) {
     console.error("Error accepting room invite:", error);
     showToast("فشل في الانضمام إلى الغرفة: " + error.message, "error");
   }
 };
+
 window.declineRoomInvite = async function (inviteId) {
   try {
     const inviteRef = doc(db, "roomInvites", inviteId);
-    await updateDoc(inviteRef, { status: "declined", respondedAt: new Date() });
+    await updateDoc(inviteRef, {
+      status: "declined",
+      respondedAt: serverTimestamp(), // Use serverTimestamp instead of new Date()
+    });
     await loadRoomInvites();
     document.dispatchEvent(
       new CustomEvent("showToast", {
@@ -291,3 +296,10 @@ export const setupRoomInviteListener = function () {
     }
   });
 };
+
+// Helper function for toast notifications (if not available globally)
+function showToast(message, type = "info") {
+  document.dispatchEvent(
+    new CustomEvent("showToast", { detail: { message, type } })
+  );
+}
