@@ -4,7 +4,7 @@ import {
   doc,
   getDoc,
   updateDoc,
-  setDoc, // Add this import
+  setDoc, // Added this import
   onSnapshot,
   collection,
   getDocs,
@@ -146,6 +146,10 @@ async function loadRoomData() {
 
 async function loadQuestions() {
   try {
+    console.log("Loading questions for room:", currentRoomId);
+    console.log("Quiz type:", gameState.quizType);
+    console.log("Question count needed:", gameState.totalQuestions);
+
     // Check if questions already exist in the room
     const questionsRef = collection(db, `rooms/${currentRoomId}/questions`);
     const questionsQuery = query(questionsRef, orderBy("order", "asc"));
@@ -181,7 +185,7 @@ async function loadQuestions() {
     }
   } catch (error) {
     console.error("Error loading questions:", error);
-    throw new Error("فشل في تحميل الأسئلة");
+    throw new Error("فشل في تحميل الأسئلة: " + error.message);
   }
 }
 
@@ -190,38 +194,65 @@ async function generateQuestions(quizType, count) {
   let allQuestions = [];
 
   try {
-    // Fetch questions based on quiz type
+    // Fetch questions based on quiz type with proper error handling
     if (quizType === "sms" || quizType === "mixed") {
-      const smsQuestions = await fetchSMSQuestions(timestamp);
-      allQuestions = allQuestions.concat(smsQuestions);
+      try {
+        const smsQuestions = await fetchSMSQuestions(timestamp);
+        allQuestions = allQuestions.concat(smsQuestions);
+        console.log("Loaded SMS questions:", smsQuestions.length);
+      } catch (error) {
+        console.error("Failed to load SMS questions, using fallback:", error);
+        const fallbackSMS = generateFallbackQuestions(5, "sms");
+        allQuestions = allQuestions.concat(fallbackSMS);
+      }
     }
 
     if (quizType === "dialogue" || quizType === "mixed") {
-      const dialogueQuestions = await fetchDialogueQuestions(timestamp);
-      allQuestions = allQuestions.concat(dialogueQuestions);
+      try {
+        const dialogueQuestions = await fetchDialogueQuestions(timestamp);
+        allQuestions = allQuestions.concat(dialogueQuestions);
+        console.log("Loaded dialogue questions:", dialogueQuestions.length);
+      } catch (error) {
+        console.error(
+          "Failed to load dialogue questions, using fallback:",
+          error
+        );
+        const fallbackDialogue = generateFallbackQuestions(5, "dialogue");
+        allQuestions = allQuestions.concat(fallbackDialogue);
+      }
     }
 
     if (quizType === "image" || quizType === "mixed") {
-      const imageQuestions = await fetchImageQuestions(timestamp);
-      allQuestions = allQuestions.concat(imageQuestions);
+      try {
+        const imageQuestions = await fetchImageQuestions(timestamp);
+        allQuestions = allQuestions.concat(imageQuestions);
+        console.log("Loaded image questions:", imageQuestions.length);
+      } catch (error) {
+        console.error("Failed to load image questions, using fallback:", error);
+        const fallbackImage = generateFallbackQuestions(5, "image");
+        allQuestions = allQuestions.concat(fallbackImage);
+      }
     }
 
-    // If we don't have enough questions, create fallback questions
+    console.log("Total questions before shuffle:", allQuestions.length);
+
+    // If we don't have enough questions, create more fallback questions
     if (allQuestions.length < count) {
-      const fallbackQuestions = generateFallbackQuestions(
-        count - allQuestions.length
-      );
-      allQuestions = allQuestions.concat(fallbackQuestions);
+      const needed = count - allQuestions.length;
+      const additionalQuestions = generateFallbackQuestions(needed, "mixed");
+      allQuestions = allQuestions.concat(additionalQuestions);
+      console.log("Added fallback questions:", additionalQuestions.length);
     }
 
     // Shuffle and take the required number
     allQuestions = shuffleArray(allQuestions).slice(0, count);
+    console.log("Final questions count:", allQuestions.length);
 
     return allQuestions;
   } catch (error) {
     console.error("Error generating questions:", error);
-    // Return fallback questions if fetching fails
-    return generateFallbackQuestions(count);
+    // Return fallback questions if everything fails
+    return generateFallbackQuestions(count, "mixed");
   }
 }
 
@@ -231,13 +262,20 @@ async function fetchSMSQuestions(timestamp) {
       `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${timestamp}`
     );
 
-    if (!response.ok) throw new Error("Failed to fetch SMS questions");
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
     const data = await response.json();
+
+    if (!Array.isArray(data)) {
+      throw new Error("Invalid data format: expected array");
+    }
+
     return data.map((sms, index) => ({
-      id: `sms-${index}`,
+      id: `sms-${timestamp}-${index}`,
       type: "sms",
-      content: sms.text,
+      content: sms.text || "لا يوجد محتوى",
       sender: sms.sender || "جهة مجهولة",
       timestamp: "الآن",
       correctAnswer: sms.isPhish ? "phishing" : "safe",
@@ -246,7 +284,7 @@ async function fetchSMSQuestions(timestamp) {
     }));
   } catch (error) {
     console.error("Error fetching SMS questions:", error);
-    return [];
+    throw error; // Re-throw to be handled by caller
   }
 }
 
@@ -256,11 +294,18 @@ async function fetchDialogueQuestions(timestamp) {
       `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${timestamp}`
     );
 
-    if (!response.ok) throw new Error("Failed to fetch dialogue questions");
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
     const data = await response.json();
+
+    if (!Array.isArray(data)) {
+      throw new Error("Invalid data format: expected array");
+    }
+
     return data.map((dialogue, index) => ({
-      id: `dialogue-${index}`,
+      id: `dialogue-${timestamp}-${index}`,
       type: "dialogue",
       messages: dialogue.messages || [],
       correctAnswers: dialogue.correctAnswers || [],
@@ -269,7 +314,7 @@ async function fetchDialogueQuestions(timestamp) {
     }));
   } catch (error) {
     console.error("Error fetching dialogue questions:", error);
-    return [];
+    throw error; // Re-throw to be handled by caller
   }
 }
 
@@ -279,11 +324,18 @@ async function fetchImageQuestions(timestamp) {
       `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${timestamp}`
     );
 
-    if (!response.ok) throw new Error("Failed to fetch image questions");
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
     const data = await response.json();
+
+    if (!Array.isArray(data)) {
+      throw new Error("Invalid data format: expected array");
+    }
+
     return data.map((image, index) => ({
-      id: `image-${index}`,
+      id: `image-${timestamp}-${index}`,
       type: "image",
       imageUrl: image.url,
       description: image.description || "",
@@ -293,30 +345,59 @@ async function fetchImageQuestions(timestamp) {
     }));
   } catch (error) {
     console.error("Error fetching image questions:", error);
-    return [];
+    throw error; // Re-throw to be handled by caller
   }
 }
 
-function generateFallbackQuestions(count) {
+function generateFallbackQuestions(count, type = "mixed") {
   const questions = [];
 
   for (let i = 0; i < count; i++) {
     const isPhishing = Math.random() > 0.5;
+    const questionTypes =
+      type === "mixed"
+        ? ["sms", "dialogue", "image"][Math.floor(Math.random() * 3)]
+        : type;
 
-    questions.push({
-      id: `fallback-${i}`,
-      type: "sms",
-      content: isPhishing
-        ? "مبروك! فزت بجائزة 10000 دينار. اضغط هنا لاستلام جائزتك: winprize.com"
-        : "إشعار من البنك: تمت عملية سحب بمبلغ 500 دينار. إذا لم تكن أنت، اتصل بنا فوراً على 198",
-      sender: isPhishing ? "مسابقة" : "البنك الأهلي",
-      timestamp: "الآن",
-      correctAnswer: isPhishing ? "phishing" : "safe",
-      difficulty: 1,
-      explanation: isPhishing
-        ? "عروض الجوائز الفورية غالباً ما تكون محاولات احتيال"
-        : "هذه رسالة أمنة من البنك تحتوي على رقم خدمة عملاء معروف",
-    });
+    if (questionTypes === "sms") {
+      questions.push({
+        id: `fallback-sms-${i}-${Date.now()}`,
+        type: "sms",
+        content: isPhishing
+          ? "مبروك! فزت بجائزة 10000 دينار. اضغط هنا لاستلام جائزتك: winprize.com"
+          : "إشعار من البنك: تمت عملية سحب بمبلغ 500 دينار. إذا لم تكن أنت، اتصل بنا فوراً على 198",
+        sender: isPhishing ? "مسابقة" : "البنك الأهلي",
+        timestamp: "الآن",
+        correctAnswer: isPhishing ? "phishing" : "safe",
+        difficulty: 1,
+        explanation: isPhishing
+          ? "عروض الجوائز الفورية غالباً ما تكون محاولات احتيال"
+          : "هذه رسالة أمنة من البنك تحتوي على رقم خدمة عملاء معروف",
+      });
+    } else if (questionTypes === "dialogue") {
+      questions.push({
+        id: `fallback-dialogue-${i}-${Date.now()}`,
+        type: "dialogue",
+        messages: [
+          { sender: "other", text: "مرحباً، هذا عرض خاص لك..." },
+          { sender: "user", text: "شكراً، لكنني لست مهتماً" },
+        ],
+        correctAnswers: ["phishing"],
+        difficulty: 1,
+        explanation: "الرسائل غير الرسمية مع عروض خاصة قد تكون احتيال",
+      });
+    } else if (questionTypes === "image") {
+      questions.push({
+        id: `fallback-image-${i}-${Date.now()}`,
+        type: "image",
+        imageUrl:
+          "https://via.placeholder.com/300x200/4A5568/FFFFFF?text=صورة+اختبارية",
+        description: "صورة اختبارية للتدريب على اكتشاف المحتوى الاحتيالي",
+        correctAnswer: isPhishing ? "phishing" : "safe",
+        difficulty: 1,
+        explanation: "هذه صورة اختبارية لأغراض التدريب",
+      });
+    }
   }
 
   return questions;
@@ -698,8 +779,8 @@ async function saveAnswer(answer, isCorrect) {
       `${currentUser.uid}_${gameState.currentQuestion}`
     );
 
-    // Use updateDoc with merge to create the document if it doesn't exist
-    await updateDoc(answerDoc, {
+    // Use setDoc to create the document (this will work for new documents)
+    await setDoc(answerDoc, {
       userId: currentUser.uid,
       userName: currentUser.displayName || "لاعب",
       questionIndex: gameState.currentQuestion,
@@ -707,6 +788,9 @@ async function saveAnswer(answer, isCorrect) {
       isCorrect: isCorrect,
       timestamp: serverTimestamp(),
     });
+
+    console.log("Answer saved successfully");
+
     // Also update the player's score in the room
     const roomRef = doc(db, "rooms", currentRoomId);
     const roomDoc = await getDoc(roomRef);
@@ -726,9 +810,12 @@ async function saveAnswer(answer, isCorrect) {
       await updateDoc(roomRef, {
         players: updatedPlayers,
       });
+
+      console.log("Player score updated");
     }
   } catch (error) {
     console.error("Error saving answer:", error);
+    // Don't throw the error here, just log it
   }
 }
 
