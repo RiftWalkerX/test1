@@ -1,828 +1,464 @@
-// room-game.js - Fixed version with proper question fetching and timing
+// room-game.js - Modified to work like older quiz system
 import { auth, db } from "./firebase-init.js";
 import {
   doc,
-  getDoc,
   updateDoc,
-  onSnapshot,
+  increment,
   collection,
-  getDocs,
+  onSnapshot,
+  getDoc,
+  addDoc,
+  setDoc,
   serverTimestamp,
-  arrayUnion,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import achievementService from "./achievement-service.js";
+import { updateStreakWithPoints } from "./streak.js";
 
-class RoomGame {
-  constructor() {
-    this.roomId = null;
-    this.userId = null;
-    this.roomData = null;
-    this.currentQuestionIndex = 0;
-    this.totalQuestions = 10;
-    this.userScore = 0;
-    this.currentStreak = 0;
-    this.timer = 5; // 5 seconds for answering
-    this.timerInterval = null;
-    this.hasAnswered = false;
-    this.questions = [];
-    this.players = [];
-    this.quizType = "mixed";
-    this.isHost = false;
+let questionStartTime = 0;
+let currentQuizScore = 0;
+let currentQuizTotal = 0;
+let scenarios = [];
+let index = 0;
+let score = 0;
+let answered = false;
+let currentMessageIndex = 0;
+const urlParams = new URLSearchParams(window.location.search);
+const roomId = urlParams.get("roomId");
 
-    this.init();
+let msgCard, qIndex, qTotal, bar, feedback, nextBtn, finishBtn, leaderboard;
+let currentQuizType = "mixed";
+
+document.addEventListener("DOMContentLoaded", function () {
+  msgCard = document.querySelector("#msgCard");
+  qIndex = document.querySelector("#qIndex");
+  qTotal = document.querySelector("#qTotal");
+  bar = document.querySelector("#bar");
+  feedback = document.querySelector("#feedback");
+  nextBtn = document.querySelector("#nextBtn");
+  finishBtn = document.querySelector("#finishBtn");
+  leaderboard = document.querySelector("#leaderboard");
+
+  if (
+    !msgCard ||
+    !qIndex ||
+    !qTotal ||
+    !bar ||
+    !feedback ||
+    !nextBtn ||
+    !finishBtn ||
+    !leaderboard
+  ) {
+    console.error("Some DOM elements are missing. Check your HTML structure.");
+    return;
   }
 
-  async init() {
-    console.log("Initializing RoomGame...");
+  onAuthStateChanged(auth, (user) => {
+    if (!user) {
+      window.location.href = "login.html";
+      return;
+    }
+    initializeRoomGame();
+  });
+});
 
-    // Get room ID from URL parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    this.roomId = urlParams.get("roomId");
-    this.userId = auth.currentUser?.uid;
-
-    console.log("Room ID from URL:", this.roomId);
-    console.log("User ID:", this.userId);
-
-    if (!this.roomId) {
-      this.showError("معرف الغرفة غير موجود في الرابط");
+async function initializeRoomGame() {
+  try {
+    if (!roomId) {
+      msgCard.innerHTML = "<p>No room ID provided.</p>";
       return;
     }
 
-    if (!this.userId) {
-      this.showError("لم يتم العثور على مستخدم مسجل الدخول");
+    // Get room data to determine quiz type
+    const roomDoc = await getDoc(doc(db, "rooms", roomId));
+    if (!roomDoc.exists()) {
+      msgCard.innerHTML = "<p>Room not found.</p>";
       return;
     }
 
-    this.setupEventListeners();
-    await this.loadRoomData();
-  }
-
-  setupEventListeners() {
-    console.log("Setting up event listeners...");
-
-    // Answer button listeners
-    const safeBtn = document.getElementById("safeBtn");
-    const phishingBtn = document.getElementById("phishingBtn");
-    const submitDialogueBtn = document.getElementById("submitDialogueBtn");
-
-    if (safeBtn) {
-      safeBtn.addEventListener("click", () => this.handleAnswer("safe"));
-    }
-
-    if (phishingBtn) {
-      phishingBtn.addEventListener("click", () =>
-        this.handleAnswer("phishing")
-      );
-    }
-
-    if (submitDialogueBtn) {
-      submitDialogueBtn.addEventListener("click", () =>
-        this.handleDialogueSubmission()
-      );
-    }
-
-    // Game over modal buttons
-    const playAgainBtn = document.getElementById("playAgainBtn");
-    const closeModalBtn = document.getElementById("closeModalBtn");
-
-    if (playAgainBtn) {
-      playAgainBtn.addEventListener("click", () => {
-        window.location.href = `room.html?roomId=${this.roomId}`;
-      });
-    }
-
-    if (closeModalBtn) {
-      closeModalBtn.addEventListener("click", () => {
-        window.location.href = "dashboard.html";
-      });
-    }
-  }
-
-  async loadRoomData() {
-    try {
-      console.log("Loading room data for room:", this.roomId);
-
-      const roomRef = doc(db, "rooms", this.roomId);
-      const roomDoc = await getDoc(roomRef);
-
-      if (!roomDoc.exists()) {
-        this.showError("لم يتم العثور على الغرفة في قاعدة البيانات");
-        return;
-      }
-
-      this.roomData = roomDoc.data();
-      console.log("Room data loaded:", this.roomData);
-
-      this.quizType = this.roomData.quizType || "mixed";
-      this.totalQuestions = this.roomData.questionCount || 10;
-      this.isHost = this.roomData.hostId === this.userId;
-
-      // Update UI with room info
-      this.updateRoomInfo();
-
-      // Setup real-time listeners
-      this.setupRealtimeListeners();
-
-      // Load questions from GitHub
-      await this.loadQuestionsFromGitHub();
-
-      // Hide loading overlay
-      this.hideLoading();
-
-      // Start the game if it's already started
-      if (this.roomData.status === "started") {
-        this.startGame();
-      } else {
-        this.showWaitingMessage("بانتظار بدء اللعبة من قبل المضيف...");
-      }
-    } catch (error) {
-      console.error("Error loading room data:", error);
-      this.showError("فشل تحميل بيانات الغرفة: " + error.message);
-    }
-  }
-
-  updateRoomInfo() {
-    const roomTitle = document.getElementById("roomTitle");
-    const roomCodeDisplay = document.getElementById("roomCodeDisplay");
-    const userPoints = document.getElementById("userPoints");
-    const currentStreak = document.getElementById("currentStreak");
-
-    if (roomTitle && this.roomData?.roomName) {
-      roomTitle.textContent = this.roomData.roomName;
-    }
-
-    if (roomCodeDisplay) {
-      roomCodeDisplay.textContent = `رمز: ${this.roomId}`;
-    }
-
-    if (userPoints) userPoints.textContent = this.userScore;
-    if (currentStreak) currentStreak.textContent = this.currentStreak;
-  }
-
-  setupRealtimeListeners() {
-    // Listen to room changes with error handling
-    this.roomListener = onSnapshot(
-      doc(db, "rooms", this.roomId),
-      (doc) => {
-        if (doc.exists()) {
-          const newData = doc.data();
-          console.log("Room updated:", newData);
-          this.handleRoomUpdate(newData);
-        }
-      },
-      (error) => {
-        console.error("Error listening to room:", error);
-      }
-    );
-
-    // Listen to players changes
-    this.playersListener = onSnapshot(
-      collection(db, `rooms/${this.roomId}/players`),
-      (snapshot) => {
-        this.players = snapshot.docs.map((doc) => doc.data());
-        console.log("Players updated:", this.players);
-        this.updatePlayersStatus();
-      },
-      (error) => {
-        console.error("Error listening to players:", error);
-      }
-    );
-  }
-
-  handleRoomUpdate(newData) {
-    this.roomData = newData;
-
-    // Handle game state changes
-    if (newData.status === "started" && this.roomData.status !== "started") {
-      this.startGame();
-    } else if (newData.status === "ended") {
-      this.endGame();
-    }
-
-    // Handle question progression
-    if (newData.currentQuestion !== this.currentQuestionIndex) {
-      this.currentQuestionIndex = newData.currentQuestion;
-      if (this.roomData.status === "started") {
-        this.loadQuestion();
-      }
-    }
-
-    this.updateRoomInfo();
-  }
-
-  async loadQuestionsFromGitHub() {
-    try {
-      console.log("Loading questions from GitHub...");
-      const now = Date.now();
-
-      const [smsRes, dialogueRes, imageRes] = await Promise.all([
-        fetch(
-          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${now}`
-        ),
-        fetch(
-          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${now}`
-        ),
-        fetch(
-          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${now}`
-        ),
-      ]);
-
-      if (!smsRes.ok || !dialogueRes.ok || !imageRes.ok) {
-        throw new Error("Failed to fetch questions from GitHub");
-      }
-
-      const [smsData, dialogueData, imageData] = await Promise.all([
-        smsRes.json(),
-        dialogueRes.json(),
-        imageRes.json(),
-      ]);
-
-      console.log("Fetched questions:", {
-        sms: smsData.length,
-        dialogue: dialogueData.length,
-        image: imageData.length,
-      });
-
-      // Use the exact number of questions the host selected
-      this.totalQuestions = this.roomData.questionCount || 10;
-      console.log(
-        `Loading ${this.totalQuestions} questions for quiz type: ${this.quizType}`
-      );
-
-      // Transform questions
-      let allQuestions = [];
-
-      // SMS questions
-      const smsQuestions = smsData.map((sms, index) => ({
-        id: `sms-${index}`,
-        type: "sms",
-        content: sms.text,
-        sender: sms.sender || "جهة مجهولة",
-        timestamp: "الآن",
-        correctAnswer: sms.isPhish ? "phishing" : "safe",
-        difficulty: sms.difficulty || 2,
-        explanation: sms.explanation || "لا توجد تفاصيل إضافية",
-      }));
-
-      // Dialogue questions
-      const dialogueQuestions = dialogueData.map((dialogue, index) => ({
-        id: `dialogue-${index}`,
-        type: "dialogue",
-        messages: dialogue.messages || [],
-        correctAnswer: dialogue.isPhish ? "phishing" : "safe", // Use actual data
-        difficulty: dialogue.difficulty || 2,
-        explanation: dialogue.explanation || "لا توجد تفاصيل إضافية",
-      }));
-
-      // Image questions
-      const imageQuestions = imageData.map((image, index) => ({
-        id: `image-${index}`,
-        type: "image",
-        imageUrl: image.url,
-        description: image.description || "",
-        correctAnswer: image.isPhish ? "phishing" : "safe",
-        difficulty: image.difficulty || 2,
-        explanation: image.explanation || "لا توجد تفاصيل إضافية",
-      }));
-
-      // Select questions based on quiz type and exact count
-      switch (this.quizType) {
-        case "sms":
-          allQuestions = this.shuffleArray(smsQuestions).slice(
-            0,
-            this.totalQuestions
-          );
-          break;
-        case "dialogue":
-          allQuestions = this.shuffleArray(dialogueQuestions).slice(
-            0,
-            this.totalQuestions
-          );
-          break;
-        case "image":
-          allQuestions = this.shuffleArray(imageQuestions).slice(
-            0,
-            this.totalQuestions
-          );
-          break;
-        case "mixed":
-        default:
-          // Mix questions proportionally based on exact count
-          const smsCount = Math.ceil(this.totalQuestions * 0.4);
-          const dialogueCount = Math.ceil(this.totalQuestions * 0.3);
-          const imageCount = this.totalQuestions - smsCount - dialogueCount;
-
-          allQuestions = [
-            ...this.shuffleArray(smsQuestions).slice(0, smsCount),
-            ...this.shuffleArray(dialogueQuestions).slice(0, dialogueCount),
-            ...this.shuffleArray(imageQuestions).slice(0, imageCount),
-          ];
-
-          // Ensure exact count
-          allQuestions = allQuestions.slice(0, this.totalQuestions);
-          break;
-      }
-
-      this.questions = allQuestions;
-      console.log(`Loaded ${this.questions.length} questions`);
-    } catch (error) {
-      console.error("Error loading questions from GitHub:", error);
-      // Fallback with exact count
-      this.questions = this.generateSampleQuestions().slice(
-        0,
-        this.totalQuestions
-      );
-    }
-  }
-
-  shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-  }
-
-  startGame() {
-    console.log("Starting game...");
-    this.currentQuestionIndex = this.roomData.currentQuestion || 0;
-    this.loadQuestion();
-    this.startTimer();
-  }
-
-  loadQuestion() {
-    if (this.currentQuestionIndex >= this.questions.length) {
-      this.endGame();
-      return;
-    }
-
-    const question = this.questions[this.currentQuestionIndex];
-    this.hasAnswered = false;
-
-    console.log("Loading question:", question);
-
-    // Hide all states
-    this.hideElement("loadingState");
-    this.hideElement("waitingState");
-    this.hideElement("resultsState");
-    this.showElement("questionContent");
-
-    // Hide all question types
-    this.hideAllQuestionTypes();
-
-    // Show appropriate question type
-    switch (question.type) {
-      case "sms":
-        this.showSMSQuestion(question);
-        break;
-      case "dialogue":
-        this.showDialogueQuestion(question);
-        break;
-      case "image":
-        this.showImageQuestion(question);
-        break;
-      default:
-        this.showSMSQuestion(question);
-        break;
-    }
-
-    this.updateQuestionProgress();
-    this.updateDifficultyIndicator(question.difficulty || 2);
-
-    // Reset and start timer
-    this.timer = 5;
-    this.updateTimerDisplay();
-    this.startTimer();
-  }
-
-  showSMSQuestion(question) {
-    this.showElement("smsQuestion");
-    const smsContent = document.getElementById("smsContent");
-    const smsSender = document.getElementById("smsSender");
-    const smsTimestamp = document.getElementById("smsTimestamp");
-
-    if (smsContent) smsContent.textContent = question.content;
-    if (smsSender) smsSender.textContent = question.sender || "جهة مجهولة";
-    if (smsTimestamp) smsTimestamp.textContent = question.timestamp || "الآن";
-  }
-
-  showDialogueQuestion(question) {
-    this.showElement("dialogueQuestion");
-    const messagesContainer = document.getElementById("dialogueMessages");
-    const submitBtn = document.getElementById("submitDialogueBtn");
-
-    if (messagesContainer) {
-      messagesContainer.innerHTML = `
-      <div class="dialogue-container bg-white/5 rounded-lg p-4 max-h-80 overflow-y-auto">
-        <div class="space-y-3" id="dialogueMessagesList">
-          ${(question.messages || [])
-            .map(
-              (msg, index) => `
-            <div class="flex ${
-              msg.sender === "user" ? "justify-end" : "justify-start"
-            }">
-              <div class="max-w-xs rounded-2xl p-3 ${
-                msg.sender === "user"
-                  ? "bg-blue-500 text-white rounded-br-none"
-                  : "bg-gray-300 text-gray-800 rounded-bl-none"
-              }">
-                <p class="text-sm">${msg.text}</p>
-                <p class="text-xs opacity-70 mt-1 text-right">${
-                  msg.time || ""
-                }</p>
-              </div>
-            </div>
-          `
-            )
-            .join("")}
-        </div>
-      </div>
-      
-      <div class="mt-4 bg-white/10 rounded-lg p-4">
-        <p class="text-white font-medium mb-3">اختر الرسائل المشبوهة:</p>
-        <div class="space-y-2" id="suspiciousOptions">
-          ${(question.messages || [])
-            .map(
-              (msg, index) => `
-            <label class="flex items-center gap-3 p-3 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors">
-              <input type="checkbox" name="suspiciousMessage" value="${index}" 
-                     class="w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500">
-              <div class="flex-1">
-                <p class="text-white text-sm">${msg.text}</p>
-                <p class="text-blue-200 text-xs">${
-                  msg.sender === "user" ? "أنت" : "المرسل"
-                }</p>
-              </div>
-            </label>
-          `
-            )
-            .join("")}
-        </div>
-      </div>
-    `;
-    }
-
-    if (submitBtn) this.showElement("submitDialogueBtn");
-  }
-
-  handleDialogueSubmission() {
-    const checkboxes = document.querySelectorAll(
-      'input[name="suspiciousMessage"]:checked'
-    );
-    const selectedMessages = Array.from(checkboxes).map((cb) =>
-      parseInt(cb.value)
-    );
-
-    // Simple scoring: if they selected any message, consider it correct for now
-    // You can enhance this with actual correct answers from your data
-    const isCorrect = selectedMessages.length > 0;
-
-    this.handleAnswer(isCorrect ? "phishing" : "safe");
-  }
-  showImageQuestion(question) {
-    this.showElement("imageQuestion");
-    const imgElement = document.getElementById("questionImage");
-    const imgDescription = document.getElementById("imageDescription");
-
-    if (imgElement) {
-      imgElement.src =
-        question.imageUrl ||
-        "https://images.unsplash.com/photo-1584824486509-112e4181ff6b?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D";
-      imgElement.alt = question.description || "صورة السؤال";
-    }
-    if (imgDescription) {
-      imgDescription.textContent = question.description || "";
-    }
-  }
-
-  async handleAnswer(answer) {
-    if (this.hasAnswered) return;
-
-    const question = this.questions[this.currentQuestionIndex];
-    const isCorrect = answer === question.correctAnswer;
-
-    this.hasAnswered = true;
-    clearInterval(this.timerInterval);
-
-    // Update player score
-    if (isCorrect) {
-      this.userScore += 50;
-      this.currentStreak++;
-    } else {
-      this.currentStreak = 0;
-    }
-
-    // Update Firestore with player's answer
-    await this.updatePlayerAnswer(answer, isCorrect);
-
-    // Show results for 1 second
-    this.showResults(isCorrect, question.explanation);
-
-    // Move to next question after 1 second
-    setTimeout(() => {
-      this.nextQuestion();
-    }, 1000);
-  }
-
-  async updatePlayerAnswer(answer, isCorrect) {
-    try {
-      const playerRef = doc(db, `rooms/${this.roomId}/players`, this.userId);
-      await updateDoc(playerRef, {
-        score: this.userScore,
-        lastAnswer: serverTimestamp(),
-        [`answers.${this.currentQuestionIndex}`]: {
-          answer: answer,
-          correct: isCorrect,
-          timestamp: serverTimestamp(),
-        },
-      });
-
-      // Also update the main room document for real-time sync
-      const roomRef = doc(db, "rooms", this.roomId);
-      await updateDoc(roomRef, {
-        [`scores.${this.userId}`]: this.userScore,
-      });
-    } catch (error) {
-      console.error("Error updating player answer:", error);
-    }
-  }
-
-  handleDialogueSubmission() {
-    // For dialogue questions, use a simple approach
-    this.handleAnswer("phishing");
-  }
-
-  showResults(isCorrect, explanation) {
-    this.hideElement("questionContent");
-    this.showElement("resultsState");
-
-    const resultIcon = document.getElementById("resultIcon");
-    const resultTitle = document.getElementById("resultTitle");
-    const resultMessage = document.getElementById("resultMessage");
-    const resultExplanation = document.getElementById("resultExplanation");
-    const pointsEarned = document.getElementById("pointsEarned");
-
-    if (isCorrect) {
-      resultIcon.textContent = "✓";
-      resultTitle.textContent = "إجابة صحيحة!";
-      resultMessage.textContent = "لقد تعرفت بنجاح على محاولة الاحتيال.";
-      resultTitle.className = "text-xl font-bold text-green-400 mb-2";
-    } else {
-      resultIcon.textContent = "✗";
-      resultTitle.textContent = "إجابة خاطئة";
-      resultMessage.textContent = "كانت هذه محاولة احتيال.";
-      resultTitle.className = "text-xl font-bold text-red-400 mb-2";
-    }
-
-    if (resultExplanation) resultExplanation.textContent = explanation;
-    if (pointsEarned) pointsEarned.textContent = isCorrect ? "+50" : "+0";
-  }
-
-  async nextQuestion() {
-    this.currentQuestionIndex++;
-
-    if (this.currentQuestionIndex >= this.totalQuestions) {
-      await this.endGame();
-    } else {
-      // Update room's current question in Firestore
-      try {
-        await updateDoc(doc(db, "rooms", this.roomId), {
-          currentQuestion: this.currentQuestionIndex,
-        });
-      } catch (error) {
-        console.error("Error updating current question:", error);
-        // Continue anyway
-        this.loadQuestion();
-      }
-    }
-  }
-
-  startTimer() {
-    clearInterval(this.timerInterval);
-    this.timer = 5;
-    this.updateTimerDisplay();
-
-    this.timerInterval = setInterval(() => {
-      this.timer--;
-      this.updateTimerDisplay();
-
-      if (this.timer <= 0) {
-        clearInterval(this.timerInterval);
-        if (!this.hasAnswered) {
-          this.handleAnswer(""); // Auto-submit as wrong answer
+    const roomData = roomDoc.data();
+    currentQuizType = roomData.quizType || "mixed";
+
+    // Join the room as player if not already joined
+    await setDoc(doc(db, `rooms/${roomId}/players`, auth.currentUser.uid), {
+      displayName: auth.currentUser.displayName || "Player",
+      score: 0,
+      isHost: false,
+    });
+
+    // Listen for room status changes
+    onSnapshot(doc(db, "rooms", roomId), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        if (data.status === "started") {
+          loadScenarios();
+        } else if (data.status === "finished") {
+          showLeaderboard();
         }
       }
-    }, 1000);
-  }
+    });
 
-  async endGame() {
-    console.log("Game ended");
-    clearInterval(this.timerInterval);
-
-    try {
-      // Update room status to ended
-      const roomRef = doc(db, "rooms", this.roomId);
-      await updateDoc(roomRef, {
-        status: "ended",
-        endedAt: serverTimestamp(),
-      });
-
-      this.showGameOverModal();
-    } catch (error) {
-      console.error("Error ending game:", error);
-      this.showGameOverModal();
-    }
-  }
-
-  showGameOverModal() {
-    const modal = document.getElementById("gameOverModal");
-    const finalScores = document.getElementById("finalScores");
-
-    if (!modal || !finalScores) return;
-
-    // Sort players by score
-    const sortedPlayers = [...this.players].sort(
-      (a, b) => (b.score || 0) - (a.score || 0)
-    );
-
-    finalScores.innerHTML = sortedPlayers
-      .map(
-        (player, index) => `
-      <div class="flex items-center justify-between p-3 bg-white/5 rounded-lg ${
-        index === 0 ? "text-yellow-400" : "text-white"
-      }">
-        <div class="flex items-center gap-3">
-          <span class="font-bold">${index + 1}.</span>
-          <span>${player.displayName}</span>
-          ${
-            player.isHost
-              ? '<span class="text-yellow-400 text-sm">👑 المضيف</span>'
-              : ""
-          }
-        </div>
-        <span class="font-bold">${player.score || 0} نقطة</span>
-      </div>
-    `
-      )
-      .join("");
-
-    modal.classList.remove("hidden");
-
-    // Remove room listener to prevent spam
-    if (this.roomListener) {
-      this.roomListener();
-    }
-  }
-
-  // Helper methods
-  showElement(elementId) {
-    const element = document.getElementById(elementId);
-    if (element) element.classList.remove("hidden");
-  }
-
-  hideElement(elementId) {
-    const element = document.getElementById(elementId);
-    if (element) element.classList.add("hidden");
-  }
-
-  hideAllQuestionTypes() {
-    this.hideElement("smsQuestion");
-    this.hideElement("dialogueQuestion");
-    this.hideElement("imageQuestion");
-    this.hideElement("submitDialogueBtn");
-  }
-
-  updateQuestionProgress() {
-    const currentQuestionEl = document.getElementById("currentQuestion");
-    const totalQuestionsEl = document.getElementById("totalQuestions");
-
-    if (currentQuestionEl) {
-      currentQuestionEl.textContent = this.currentQuestionIndex + 1;
-    }
-    if (totalQuestionsEl) {
-      totalQuestionsEl.textContent = this.totalQuestions;
-    }
-  }
-
-  updateDifficultyIndicator(difficulty) {
-    const stars = document.querySelectorAll(".difficulty-star");
-    if (stars.length > 0) {
-      stars.forEach((star, index) => {
-        if (index < difficulty) {
-          star.classList.add("text-yellow-400");
-          star.classList.remove("text-gray-400");
-        } else {
-          star.classList.remove("text-yellow-400");
-          star.classList.add("text-gray-400");
-        }
-      });
-    }
-  }
-
-  updateTimerDisplay() {
-    const timerElement = document.getElementById("timer");
-    if (timerElement) {
-      timerElement.textContent = this.timer;
-      timerElement.className = `text-white font-medium ${
-        this.timer <= 3 ? "text-red-400 animate-pulse" : ""
-      }`;
-    }
-  }
-
-  updatePlayersStatus() {
-    const playersList = document.getElementById("playersList");
-    if (!playersList) return;
-
-    playersList.innerHTML = this.players
-      .map(
-        (player) => `
-      <div class="flex items-center justify-between p-2 bg-white/5 rounded-lg">
-        <div class="flex items-center gap-2">
-          <div class="w-3 h-3 rounded-full ${
-            player.isReady ? "bg-green-500" : "bg-yellow-500"
-          }"></div>
-          <span class="text-white text-sm">${player.displayName}</span>
-          ${
-            player.isHost
-              ? '<span class="text-yellow-400 text-xs">👑</span>'
-              : ""
-          }
-        </div>
-        <span class="text-blue-200 text-sm">${player.score || 0}</span>
-      </div>
-    `
-      )
-      .join("");
-  }
-
-  showWaitingMessage(message) {
-    this.hideElement("loadingState");
-    this.hideElement("questionContent");
-    this.hideElement("resultsState");
-
-    const waitingState = document.getElementById("waitingState");
-    const waitingText = document.getElementById("waitingText");
-
-    if (waitingState && waitingText) {
-      waitingText.textContent = message;
-      this.showElement("waitingState");
-    }
-  }
-
-  hideLoading() {
-    const loadingOverlay = document.getElementById("loadingOverlay");
-    if (loadingOverlay) {
-      loadingOverlay.style.display = "none";
-    }
-  }
-
-  showError(message) {
-    const errorDiv = document.createElement("div");
-    errorDiv.className =
-      "fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white p-4 rounded-lg z-50";
-    errorDiv.innerHTML = `
-      <div class="flex items-center gap-2">
-        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-        </svg>
-        <span>${message}</span>
-      </div>
-    `;
-
-    document.body.appendChild(errorDiv);
-
-    setTimeout(() => {
-      if (document.body.contains(errorDiv)) {
-        document.body.removeChild(errorDiv);
-      }
-      setTimeout(() => {
-        window.location.href = "dashboard.html";
-      }, 2000);
-    }, 5000);
-  }
-
-  generateSampleQuestions() {
-    return [
-      {
-        type: "sms",
-        content:
-          "عزيزي العميل، لديك رصيد مجاني 10 دينار. لاستلامه اضغط على الرابط: bit.ly/free-balance",
-        sender: "اتصالات",
-        timestamp: "الآن",
-        correctAnswer: "phishing",
-        difficulty: 2,
-        explanation: "هذه رسالة تصيد تحتوي على رابط مختصر مشبوه",
-      },
-    ];
+    // Show waiting message
+    msgCard.innerHTML = "<p>Waiting for host to start the game...</p>";
+  } catch (error) {
+    console.error("Error initializing room game:", error);
+    msgCard.innerHTML = "<p>Error joining room: " + error.message + "</p>";
   }
 }
 
-// Initialize the game when the page loads
-document.addEventListener("DOMContentLoaded", () => {
-  auth.onAuthStateChanged((user) => {
-    if (!user) {
-      window.location.href = "newlogin.html";
+async function loadScenarios() {
+  try {
+    // Load questions based on quiz type
+    let quizUrl = "";
+    switch (currentQuizType) {
+      case "sms":
+        quizUrl =
+          "https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json";
+        break;
+      case "dialogue":
+        quizUrl =
+          "https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json";
+        break;
+      case "image":
+        quizUrl =
+          "https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json";
+        break;
+      case "mixed":
+      default:
+        // For mixed, we'll use SMS questions as default
+        quizUrl =
+          "https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json";
+        break;
+    }
+
+    const response = await fetch(quizUrl + "?v=" + Date.now());
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+    const text = await response.text();
+    scenarios = JSON.parse(text);
+
+    if (scenarios.length === 0) {
+      msgCard.innerHTML = "<p>No scenarios available.</p>";
       return;
     }
-    new RoomGame();
+
+    qTotal.textContent = scenarios.length;
+    shuffle(scenarios);
+    load();
+  } catch (error) {
+    msgCard.innerHTML = "<p>Error loading scenarios: " + error.message + "</p>";
+    console.error("Fetch error:", error);
+  }
+}
+
+function load() {
+  questionStartTime = Date.now();
+
+  if (currentQuizType === "dialogue") {
+    loadDialogueScenario();
+  } else {
+    loadStandardScenario();
+  }
+
+  qIndex.textContent = index + 1;
+  bar.style.width = `${(index / scenarios.length) * 100}%`;
+  feedback.classList.add("hidden");
+  feedback.classList.remove("bad");
+  nextBtn.classList.add("hidden");
+  finishBtn.classList.add("hidden");
+  leaderboard.classList.add("hidden");
+  answered = false;
+}
+
+function loadDialogueScenario() {
+  const scenario = scenarios[index];
+  currentMessageIndex = 0;
+  msgCard.innerHTML = scenario.messages
+    .map(
+      (msg, i) => `
+    <div class="bubble ${msg.sender === "you" ? "you" : "them"}">
+      <p class="msg-text">${msg.text}</p>
+      <div class="choice-buttons ${i === 0 ? "" : "hidden"}" data-index="${i}">
+        <button class="btn-primary" onclick="choose(${i}, true)">Phishing</button>
+        <button class="btn-accent" onclick="choose(${i}, false)">Safe</button>
+      </div>
+    </div>
+  `
+    )
+    .join("");
+}
+
+function loadStandardScenario() {
+  const scenario = scenarios[index];
+
+  if (currentQuizType === "image") {
+    msgCard.innerHTML = `
+      <div class="scenario-content">
+        <h3>${scenario.title || "Identify the content"}</h3>
+        <img src="${scenario.text || scenario.url || ""}" alt="Scenario image" 
+             onerror="this.style.display='none'" 
+             style="max-width: 100%; max-height: 300px; border-radius: 8px;">
+        <div class="choice-buttons" style="margin-top: 20px;">
+          <button class="btn-primary" onclick="choose(0, true)">Phishing</button>
+          <button class="btn-accent" onclick="choose(0, false)">Safe</button>
+        </div>
+      </div>
+    `;
+  } else {
+    // SMS or mixed
+    msgCard.innerHTML = `
+      <div class="scenario-content">
+        <div class="sms-bubble">
+          <p class="msg-text">${scenario.text}</p>
+          <div class="choice-buttons" style="margin-top: 20px;">
+            <button class="btn-primary" onclick="choose(0, true)">Phishing</button>
+            <button class="btn-accent" onclick="choose(0, false)">Safe</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+}
+
+window.choose = async function (msgIndex, isPhish) {
+  if (answered) return;
+  answered = true;
+
+  const answerTime = Date.now() - questionStartTime;
+  const scenario = scenarios[index];
+
+  let correct;
+  if (currentQuizType === "dialogue") {
+    const msg = scenario.messages[msgIndex];
+    correct = isPhish === msg.isPhish;
+  } else {
+    correct = isPhish === scenario.isPhish;
+  }
+
+  const pointsEarned = 10;
+
+  if (correct) {
+    score++;
+    currentQuizScore++;
+
+    if (answerTime < 500) {
+      await updateDoc(doc(db, "users", auth.currentUser.uid), {
+        "stats.ultra_fast_answers": increment(1),
+      });
+    }
+
+    if (
+      currentQuizType === "dialogue"
+        ? scenario.messages[msgIndex].isPhish
+        : scenario.isPhish
+    ) {
+      await updateDoc(doc(db, "users", auth.currentUser.uid), {
+        "stats.total_phishing_caught": increment(1),
+      });
+    }
+
+    await updateDoc(doc(db, "users", auth.currentUser.uid), {
+      "stats.total_correct": increment(1),
+    });
+
+    // Update score in room
+    await updateDoc(doc(db, `rooms/${roomId}/players`, auth.currentUser.uid), {
+      score: increment(pointsEarned),
+    });
+
+    // Update streak when points are earned
+    await updateStreakWithPoints(auth.currentUser.uid);
+
+    // Check for achievements
+    const userRef = doc(db, "users", auth.currentUser.uid);
+    const userDoc = await getDoc(userRef);
+    let userData = userDoc.data();
+
+    if (!userData.achievements) {
+      await updateDoc(userRef, {
+        achievements: {
+          unlocked: [],
+          version: "0",
+        },
+      });
+      const updatedDoc = await getDoc(userRef);
+      userData = updatedDoc.data();
+    }
+
+    const unlocked = await achievementService.checkAchievements(
+      userData,
+      userRef
+    );
+
+    if (unlocked.length > 0) {
+      showAchievementNotification(unlocked);
+    }
+  } else {
+    await updateDoc(doc(db, "users", auth.currentUser.uid), {
+      [`stats.${currentQuizType}_wrong`]: increment(1),
+    });
+  }
+
+  currentQuizTotal++;
+
+  // Handle dialogue multi-message flow
+  if (currentQuizType === "dialogue") {
+    const scenario = scenarios[index];
+    const lastMessage = currentMessageIndex === scenario.messages.length - 1;
+
+    if (!lastMessage) {
+      currentMessageIndex++;
+      const allButtons = document.querySelectorAll(".choice-buttons");
+      allButtons.forEach((button) => button.classList.add("hidden"));
+      const nextButton = document.querySelector(
+        `.choice-buttons[data-index="${currentMessageIndex}"]`
+      );
+      if (nextButton) {
+        nextButton.classList.remove("hidden");
+      }
+      answered = false;
+      return;
+    }
+  }
+
+  const isPhishing =
+    currentQuizType === "dialogue"
+      ? scenario.messages[msgIndex].isPhish
+      : scenario.isPhish;
+
+  feedback.textContent = `${correct ? "Correct" : "Not quite"} — This is ${
+    isPhishing ? "phishing" : "safe"
+  }.`;
+  feedback.classList.toggle("bad", !correct);
+  feedback.classList.remove("hidden");
+
+  const lastScenario = index === scenarios.length - 1;
+  (lastScenario ? finishBtn : nextBtn).classList.remove("hidden");
+};
+
+window.next = function () {
+  index++;
+  if (index < scenarios.length) load();
+};
+
+window.finish = async function () {
+  if (currentQuizScore === scenarios.length) {
+    await updateDoc(doc(db, "users", auth.currentUser.uid), {
+      "stats.perfect_quizzes": increment(1),
+    });
+  }
+
+  bar.style.width = "100%";
+
+  // Mark room as finished and show leaderboard
+  await updateDoc(doc(db, "rooms", roomId), { status: "finished" });
+
+  const playerDoc = await getDoc(
+    doc(db, `rooms/${roomId}/players`, auth.currentUser.uid)
+  );
+
+  if (playerDoc.exists()) {
+    const playerScore = playerDoc.data().score || 0;
+    await updateScore(auth.currentUser.uid, playerScore);
+  }
+
+  showLeaderboard();
+};
+
+async function showLeaderboard() {
+  onSnapshot(collection(db, `rooms/${roomId}/players`), (snapshot) => {
+    const players = snapshot.docs
+      .map((doc) => doc.data())
+      .sort((a, b) => b.score - a.score);
+
+    leaderboard.innerHTML = `
+      <h3>Leaderboard</h3>
+      ${players.map((p) => `<p>${p.displayName}: ${p.score}</p>`).join("")}
+      <button class="btn-primary" onclick="window.location.href='dashboard.html'">Back to Dashboard</button>
+    `;
+    leaderboard.classList.remove("hidden");
+    finishBtn.classList.add("hidden");
   });
-});
+}
+
+async function updateScore(uid, points) {
+  try {
+    const userRef = doc(db, "users", uid);
+    await updateDoc(userRef, {
+      "stats.totalPoints": increment(points),
+      "stats.quizPoints": increment(points),
+    });
+    await addDoc(collection(db, `users/${uid}/points_log`), {
+      pointsAdded: points,
+      date: new Date(),
+    });
+
+    await updateStreakWithPoints(uid);
+  } catch (error) {
+    console.error("Error updating score:", error);
+  }
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+}
+
+function showAchievementNotification(achievementNames) {
+  if (achievementNames.length > 0) {
+    achievementNames.forEach((name, index) => {
+      const achievement = achievementService.achievements.find(
+        (a) => a.name === name
+      );
+      if (achievement) {
+        setTimeout(() => {
+          createAchievementPopup(achievement, index);
+        }, index * 300);
+      }
+    });
+  }
+}
+
+function createAchievementPopup(achievement, index) {
+  const notification = document.createElement("div");
+  notification.className = "achievement-notification";
+  notification.style.top = `${20 + index * 100}px`;
+
+  notification.innerHTML = `
+        <div class="achievement-icon">${achievement.icon}</div>
+        <div class="achievement-content">
+            <div class="achievement-title">Achievement Unlocked!</div>
+            <div class="achievement-description">${achievement.name}: ${achievement.description}</div>
+            <div class="achievement-progress-bar">
+                <div class="achievement-progress-fill"></div>
+            </div>
+        </div>
+        <div class="achievement-points">+${achievement.points_reward}</div>
+    `;
+
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.classList.add("show");
+    const progressFill = notification.querySelector(
+      ".achievement-progress-fill"
+    );
+    let width = 100;
+    const duration = 5000;
+    const interval = setInterval(() => {
+      width -= 100 / (duration / 50);
+      progressFill.style.width = width + "%";
+      if (width <= 0) {
+        clearInterval(interval);
+        notification.classList.remove("show");
+        notification.classList.add("hide");
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+          }
+        }, 500);
+      }
+    }, 50);
+  }, 100);
+}
