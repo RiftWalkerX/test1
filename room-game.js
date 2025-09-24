@@ -1,4 +1,3 @@
-// room-game.js - Fixed version with proper multiplayer sync and question loading
 import { auth, db } from "./firebase-init.js";
 import {
   doc,
@@ -14,6 +13,7 @@ import {
   serverTimestamp,
   arrayUnion,
   deleteDoc,
+  writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Game state management
@@ -27,6 +27,7 @@ let gameState = {
   questions: [],
   quizType: "mixed",
   hasAnswered: false,
+  gameStatus: "waiting", // waiting, instructions, playing, feedback, ended
 };
 
 // DOM elements
@@ -39,6 +40,11 @@ let safeBtn, phishingBtn, submitDialogueBtn;
 let userPointsElement, currentStreakElement;
 let playersListElement, currentQuestionElement, totalQuestionsElement;
 let roomTitleElement, roomCodeDisplayElement;
+
+// Game flow control
+let roomUnsubscribe = null;
+let answersUnsubscribe = null;
+let gameTimer = null;
 
 // Initialize the game
 document.addEventListener("DOMContentLoaded", async function () {
@@ -59,7 +65,6 @@ async function initializeGame() {
   // Wait for auth to be ready
   currentUser = auth.currentUser;
   if (!currentUser) {
-    // Listen for auth state change
     auth.onAuthStateChanged((user) => {
       if (user) {
         currentUser = user;
@@ -75,19 +80,10 @@ async function initializeGame() {
 
 async function loadGame() {
   try {
-    // Show loading overlay
     document.getElementById("loadingOverlay").classList.remove("hidden");
-
-    // Cache DOM elements
     cacheDOMElements();
-
-    // Load room data
     await loadRoomData();
-
-    // Set up real-time listeners
     setupRoomListeners();
-
-    // Hide loading overlay
     document.getElementById("loadingOverlay").classList.add("hidden");
   } catch (error) {
     console.error("Error loading game:", error);
@@ -127,17 +123,12 @@ async function loadRoomData() {
 
   const roomData = roomDoc.data();
 
-  // Fix quiz type inconsistencies
-  let quizType = roomData.quizType || "mixed";
-  if (quizType === "mixer" || quizType === "tmixed") {
-    quizType = "mixed";
-  }
-
-  gameState.quizType = quizType;
+  // Ensure we respect the room's question count setting
   gameState.totalQuestions = roomData.questionCount || 10;
+  gameState.quizType = roomData.quizType || "mixed";
   gameState.players = roomData.players || [];
 
-  // Update UI with room info
+  // Update UI
   if (roomTitleElement)
     roomTitleElement.textContent = roomData.roomName || "غرفة التدريب";
   if (roomCodeDisplayElement)
@@ -145,45 +136,39 @@ async function loadRoomData() {
   if (totalQuestionsElement)
     totalQuestionsElement.textContent = gameState.totalQuestions;
 
-  // Load questions for this room
   await loadQuestions();
 }
 
 async function loadQuestions() {
   try {
-    console.log("Loading questions for room:", currentRoomId);
-    console.log("Quiz type:", gameState.quizType);
-    console.log("Question count needed:", gameState.totalQuestions);
+    console.log(
+      `Loading ${gameState.totalQuestions} questions for type: ${gameState.quizType}`
+    );
 
-    // Check if questions already exist in the room
+    // Check for existing questions first
     const questionsRef = collection(db, `rooms/${currentRoomId}/questions`);
     const questionsQuery = query(questionsRef, orderBy("order", "asc"));
     const questionsSnapshot = await getDocs(questionsQuery);
 
-    if (!questionsSnapshot.empty) {
-      // Questions already exist, use them
+    if (
+      !questionsSnapshot.empty &&
+      questionsSnapshot.size === gameState.totalQuestions
+    ) {
+      // Use existing questions
       gameState.questions = questionsSnapshot.docs.map((doc) => doc.data());
       console.log("Loaded existing questions:", gameState.questions.length);
-
-      // Verify we have the correct number of questions
-      if (gameState.questions.length !== gameState.totalQuestions) {
-        console.warn(
-          `Question count mismatch: Expected ${gameState.totalQuestions}, got ${gameState.questions.length}. Regenerating...`
-        );
-        await generateAndSaveQuestions();
-      }
     } else {
-      // Generate new questions
+      // Generate new questions that match the room settings exactly
       await generateAndSaveQuestions();
     }
 
-    // Start the game immediately (single-player)
-    loadCurrentQuestion();
+    // Show instructions before starting game
+    showInstructionsModal();
   } catch (error) {
     console.error("Error loading questions:", error);
-    // Fallback to sample questions
-    await generateSampleQuestions();
-    loadCurrentQuestion();
+    // Use robust fallback that respects question count
+    await generateRobustFallbackQuestions();
+    showInstructionsModal();
   }
 }
 
@@ -193,28 +178,31 @@ async function generateAndSaveQuestions() {
       gameState.quizType,
       gameState.totalQuestions
     );
-    console.log("Generated new questions:", gameState.questions.length);
 
-    // Save questions to Firestore
+    // Save to Firestore
     const questionsRef = collection(db, `rooms/${currentRoomId}/questions`);
+    const batch = writeBatch(db);
 
-    // Clear existing questions first
+    // Clear existing questions
     const existingQuestions = await getDocs(questionsRef);
-    const deletePromises = existingQuestions.docs.map((doc) =>
-      deleteDoc(doc.ref)
-    );
-    await Promise.all(deletePromises);
+    existingQuestions.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+    });
 
     // Add new questions
-    for (let i = 0; i < gameState.questions.length; i++) {
-      await setDoc(doc(questionsRef, `question_${i}`), {
-        ...gameState.questions[i],
-        order: i,
+    gameState.questions.forEach((question, index) => {
+      const questionRef = doc(questionsRef, `question_${index}`);
+      batch.set(questionRef, {
+        ...question,
+        order: index,
         createdAt: serverTimestamp(),
       });
-    }
+    });
+
+    await batch.commit();
+    console.log("Saved new questions to Firestore");
   } catch (error) {
-    console.error("Error generating and saving questions:", error);
+    console.error("Error generating questions:", error);
     throw error;
   }
 }
@@ -224,124 +212,133 @@ async function generateQuestions(quizType, count) {
   let allQuestions = [];
 
   try {
-    console.log("Generating questions for type:", quizType);
+    // Enhanced fetch with timeout and better error handling
+    const fetchWithTimeout = async (url, timeout = 5000) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    // Enhanced fetch function with better error handling
-    const fetchWithFallback = async (url, type, fallbackGenerator) => {
       try {
-        console.log(`Fetching ${type} questions from:`, url);
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
 
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        console.log(`Successfully loaded ${data.length} ${type} questions`);
-
-        if (!Array.isArray(data)) {
-          throw new Error("Invalid data format: expected array");
-        }
-
-        return data;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
       } catch (error) {
-        console.error(`Failed to load ${type} questions:`, error);
-        // Use fallback but limit to reasonable number
-        const fallbackCount = Math.min(5, Math.ceil(count / 2));
-        return fallbackGenerator(fallbackCount, type);
+        clearTimeout(timeoutId);
+        throw error;
       }
     };
 
-    // Fetch questions based on quiz type with improved error handling
+    // Fetch based on quiz type
+    const fetchPromises = [];
+
     if (quizType === "sms" || quizType === "mixed") {
-      const smsQuestions = await fetchWithFallback(
-        `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${timestamp}`,
-        "SMS",
-        generateFallbackQuestions
-      );
-      allQuestions = allQuestions.concat(
-        smsQuestions.map((sms, index) => ({
-          id: `sms-${timestamp}-${index}`,
-          type: "sms",
-          content: sms.text || sms.content || "لا يوجد محتوى",
-          sender: sms.sender || "جهة مجهولة",
-          timestamp: sms.timestamp || "الآن",
-          correctAnswer: sms.isPhish ? "phishing" : "safe",
-          difficulty: sms.difficulty || 2,
-          explanation: sms.explanation || "لا توجد تفاصيل إضافية",
-        }))
+      fetchPromises.push(
+        fetchWithTimeout(
+          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${timestamp}`
+        )
+          .then((data) =>
+            data.map((sms, index) => ({
+              id: `sms-${timestamp}-${index}`,
+              type: "sms",
+              content: sms.text || sms.content || "لا يوجد محتوى",
+              sender: sms.sender || "جهة مجهولة",
+              timestamp: sms.timestamp || "الآن",
+              correctAnswer: sms.isPhish ? "phishing" : "safe",
+              difficulty: sms.difficulty || 2,
+              explanation: sms.explanation || "لا توجد تفاصيل إضافية",
+            }))
+          )
+          .catch((error) => {
+            console.warn("Failed to fetch SMS questions:", error);
+            return [];
+          })
       );
     }
 
     if (quizType === "image" || quizType === "mixed") {
-      const imageQuestions = await fetchWithFallback(
-        `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${timestamp}`,
-        "image",
-        generateFallbackQuestions
-      );
-      allQuestions = allQuestions.concat(
-        imageQuestions.map((image, index) => ({
-          id: `image-${timestamp}-${index}`,
-          type: "image",
-          imageUrl: image.url || image.imageUrl,
-          description: image.description || "",
-          correctAnswer: image.isPhish ? "phishing" : "safe",
-          difficulty: image.difficulty || 2,
-          explanation: image.explanation || "لا توجد تفاصيل إضافية",
-        }))
+      fetchPromises.push(
+        fetchWithTimeout(
+          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${timestamp}`
+        )
+          .then((data) =>
+            data.map((image, index) => ({
+              id: `image-${timestamp}-${index}`,
+              type: "image",
+              imageUrl: image.url || image.imageUrl,
+              description: image.description || "",
+              correctAnswer: image.isPhish ? "phishing" : "safe",
+              difficulty: image.difficulty || 2,
+              explanation: image.explanation || "لا توجد تفاصيل إضافية",
+            }))
+          )
+          .catch((error) => {
+            console.warn("Failed to fetch image questions:", error);
+            return [];
+          })
       );
     }
 
     if (quizType === "mixed") {
-      const dialogueQuestions = await fetchWithFallback(
-        `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${timestamp}`,
-        "dialogue",
-        generateFallbackQuestions
-      );
-      allQuestions = allQuestions.concat(
-        dialogueQuestions.map((dialogue, index) => ({
-          id: `dialogue-${timestamp}-${index}`,
-          type: "dialogue",
-          messages: dialogue.messages || [],
-          correctAnswers: dialogue.correctAnswers || [],
-          difficulty: dialogue.difficulty || 3,
-          explanation: dialogue.explanation || "لا توجد تفاصيل إضافية",
-        }))
+      fetchPromises.push(
+        fetchWithTimeout(
+          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${timestamp}`
+        )
+          .then((data) =>
+            data.map((dialogue, index) => ({
+              id: `dialogue-${timestamp}-${index}`,
+              type: "dialogue",
+              messages: dialogue.messages || [],
+              correctAnswers: dialogue.correctAnswers || [],
+              difficulty: dialogue.difficulty || 3,
+              explanation: dialogue.explanation || "لا توجد تفاصيل إضافية",
+            }))
+          )
+          .catch((error) => {
+            console.warn("Failed to fetch dialogue questions:", error);
+            return [];
+          })
       );
     }
 
-    console.log("Total questions before processing:", allQuestions.length);
+    const results = await Promise.allSettled(fetchPromises);
 
-    // Ensure we have exactly the required number of questions
+    // Combine successful results
+    results.forEach((result) => {
+      if (result.status === "fulfilled" && Array.isArray(result.value)) {
+        allQuestions = allQuestions.concat(result.value);
+      }
+    });
+
+    console.log("Successfully fetched questions:", allQuestions.length);
+
+    // Ensure we have exactly the required number
     if (allQuestions.length < count) {
       const needed = count - allQuestions.length;
-      console.log(`Need ${needed} more questions, generating fallbacks...`);
-      const additionalQuestions = generateFallbackQuestions(needed, quizType);
-      allQuestions = allQuestions.concat(additionalQuestions);
+      console.log(`Generating ${needed} fallback questions`);
+      const fallbacks = generateFallbackQuestions(needed, quizType);
+      allQuestions = allQuestions.concat(fallbacks);
     }
 
-    // Shuffle and take exactly the required number
+    // Shuffle and take exact count
     allQuestions = shuffleArray(allQuestions).slice(0, count);
 
-    // Final verification
     if (allQuestions.length !== count) {
-      console.warn(
-        `Final question count mismatch: Expected ${count}, got ${allQuestions.length}. Using fallbacks.`
+      throw new Error(
+        `Could not generate enough questions. Needed: ${count}, Got: ${allQuestions.length}`
       );
-      allQuestions = generateFallbackQuestions(count, quizType);
     }
 
-    console.log("Final questions count:", allQuestions.length);
     return allQuestions;
   } catch (error) {
-    console.error("Error generating questions:", error);
-    // Comprehensive fallback
+    console.error("Error in generateQuestions:", error);
+    // Return exact count of fallback questions
     return generateFallbackQuestions(count, quizType);
   }
 }
 
-async function generateSampleQuestions() {
-  console.log("Using comprehensive sample questions");
+async function generateRobustFallbackQuestions() {
+  console.log("Using robust fallback questions");
   gameState.questions = generateFallbackQuestions(
     gameState.totalQuestions,
     gameState.quizType
@@ -388,24 +385,23 @@ function generateFallbackQuestions(count, type = "mixed") {
           : "هذه صورة توعوية رسمية تحتوي على معلومات أمنة",
       });
     } else if (questionType === "dialogue") {
-      const messages = [
-        { text: "مرحباً! كيف حالك اليوم؟", isUser: false, isPhishing: false },
-        { text: "أهلاً! أنا بخير، شكراً لك.", isUser: true, isPhishing: false },
-        {
-          text: "لدي عرض رائع لك! يمكنك الفوز بجائزة كبيرة إذا شاركت الآن.",
-          isUser: false,
-          isPhishing: isPhishing,
-        },
-        { text: "حقاً؟ ما هي الجائزة؟", isUser: true, isPhishing: false },
-      ];
-
       questions.push({
         id: `fallback-dialogue-${i}-${Date.now()}`,
         type: "dialogue",
-        messages: messages,
-        correctAnswers: messages
-          .map((msg, idx) => (msg.isPhishing ? idx : -1))
-          .filter((idx) => idx !== -1),
+        messages: [
+          { text: "مرحباً! كيف حالك اليوم؟", isUser: false, isPhishing: false },
+          {
+            text: "أهلاً! أنا بخير، شكراً لك.",
+            isUser: true,
+            isPhishing: false,
+          },
+          {
+            text: "لدي عرض رائع لك! يمكنك الفوز بجائزة كبيرة إذا شاركت الآن.",
+            isUser: false,
+            isPhishing: isPhishing,
+          },
+        ],
+        correctAnswers: isPhishing ? [2] : [],
         difficulty: Math.floor(Math.random() * 3) + 2,
         explanation: isPhishing
           ? "المحادثة تحتوي على عرض جائزة مشبوه يطلب مشاركة فورية"
@@ -414,7 +410,7 @@ function generateFallbackQuestions(count, type = "mixed") {
     }
   }
 
-  return questions;
+  return questions.slice(0, count); // Ensure exact count
 }
 
 function shuffleArray(array) {
@@ -426,19 +422,57 @@ function shuffleArray(array) {
   return newArray;
 }
 
+function showInstructionsModal() {
+  const modal = document.createElement("div");
+  modal.className =
+    "fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50";
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl p-8 max-w-2xl w-full">
+      <div class="text-center">
+        <div class="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <span class="text-white text-3xl">🎮</span>
+        </div>
+        <h3 class="text-2xl font-bold text-gray-900 mb-4">تعليمات اللعبة</h3>
+        <div class="text-right space-y-3 mb-6">
+          <p class="text-gray-700">• جميع اللاعبين سيرون نفس الأسئلة في نفس الوقت</p>
+          <p class="text-gray-700">• لكل سؤال وقت محدد للإجابة</p>
+          <p class="text-gray-700">• بعد انتهاء الوقت، ستظهر الإجابة الصحيحة وتوضيحها</p>
+          <p class="text-gray-700">• النقاط تُمنح للإجابات الصحيحة فقط</p>
+          <p class="text-gray-700">• في نهاية الجولة، ستظهر النتائج النهائية</p>
+        </div>
+        <button id="startGameBtn" class="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-200">
+          بدء اللعبة
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  document.getElementById("startGameBtn").addEventListener("click", () => {
+    modal.remove();
+    startGame();
+  });
+}
+
+function startGame() {
+  gameState.gameStatus = "playing";
+  loadCurrentQuestion();
+}
+
 function setupRoomListeners() {
-  // Listen for room updates to track progress
+  // Listen for room updates
   const roomRef = doc(db, "rooms", currentRoomId);
-  onSnapshot(roomRef, (doc) => {
+  roomUnsubscribe = onSnapshot(roomRef, (doc) => {
     if (doc.exists()) {
       const roomData = doc.data();
       handleRoomUpdate(roomData);
     }
   });
 
-  // Listen for answers to sync multiplayer results
+  // Listen for answers
   const answersRef = collection(db, `rooms/${currentRoomId}/answers`);
-  onSnapshot(answersRef, (snapshot) => {
+  answersUnsubscribe = onSnapshot(answersRef, (snapshot) => {
     if (gameState.currentQuestion >= gameState.questions.length) {
       checkAllPlayersFinished();
     }
@@ -457,8 +491,11 @@ function handleRoomUpdate(roomData) {
     currentQuestionElement.textContent = gameState.currentQuestion + 1;
   }
 
-  // Single-player logic - always load current question
-  if (gameState.currentQuestion < gameState.questions.length) {
+  // Single-player logic
+  if (
+    gameState.currentQuestion < gameState.questions.length &&
+    gameState.gameStatus === "playing"
+  ) {
     loadCurrentQuestion();
   } else if (roomData.status === "ended") {
     showGameOver();
@@ -703,7 +740,7 @@ async function handleDialogueAnswer(question) {
       }
     });
 
-    // Check if answer is correct (simplified logic)
+    // Check if answer is correct
     const isCorrect =
       JSON.stringify(selectedMessages.sort()) ===
       JSON.stringify(question.correctAnswers.sort());
@@ -816,13 +853,11 @@ async function saveAnswer(answer, isCorrect) {
 function showAnswerFeedback(isCorrect, explanation) {
   const feedbackElement = document.getElementById("answerFeedback");
 
-  // Check if elements exist before trying to modify them
   if (!feedbackElement) {
     console.warn("Feedback element not found");
     return;
   }
 
-  // Create feedback content safely
   let feedbackContent = "";
 
   if (isCorrect) {
@@ -893,15 +928,15 @@ async function showGameOver() {
 
       // Listen for when all players finish
       const answersRef = collection(db, `rooms/${currentRoomId}/answers`);
-      const unsubscribe = onSnapshot(answersRef, async (snapshot) => {
+      answersUnsubscribe = onSnapshot(answersRef, async (snapshot) => {
         if (await checkAllPlayersFinished()) {
-          unsubscribe(); // Stop listening
+          answersUnsubscribe(); // Stop listening
           displayFinalResults();
         }
       });
 
-      // Timeout after 30 seconds to prevent infinite waiting
-      setTimeout(() => {
+      // Timeout after 30 seconds
+      gameTimer = setTimeout(() => {
         displayFinalResults();
       }, 30000);
     } else {
@@ -968,14 +1003,14 @@ async function displayFinalResults() {
         if (closeModalBtn) {
           closeModalBtn.textContent = "العودة إلى لوحة التحكم";
           closeModalBtn.onclick = function () {
-            cleanupRoom();
+            safeCleanup();
             window.location.href = "dashboard.html";
           };
         }
 
         // Auto-redirect after 5 seconds
         setTimeout(() => {
-          cleanupRoom();
+          safeCleanup();
           window.location.href = "dashboard.html";
         }, 5000);
       }
@@ -1031,17 +1066,40 @@ async function updateRoomStatus() {
   }
 }
 
+// Enhanced cleanup to prevent Firestore overload
 async function cleanupRoom() {
   try {
-    // Mark room for cleanup (actual deletion can be handled by a cloud function)
+    // Unsubscribe all listeners
+    if (roomUnsubscribe) roomUnsubscribe();
+    if (answersUnsubscribe) answersUnsubscribe();
+    if (gameTimer) clearTimeout(gameTimer);
+
+    // Mark room for cleanup
     const roomRef = doc(db, "rooms", currentRoomId);
     await updateDoc(roomRef, {
       status: "cleaned",
       cleanedAt: serverTimestamp(),
     });
+
+    console.log("Room cleanup completed");
   } catch (error) {
-    console.error("Error cleaning up room:", error);
+    console.error("Error in cleanupRoom:", error);
   }
+}
+
+// Enhanced beforeunload handler
+window.addEventListener("beforeunload", (e) => {
+  safeCleanup();
+});
+
+// Prevent multiple simultaneous cleanups
+let cleanupInProgress = false;
+async function safeCleanup() {
+  if (cleanupInProgress) return;
+  cleanupInProgress = true;
+
+  await cleanupRoom();
+  cleanupInProgress = false;
 }
 
 function showError(message) {
@@ -1064,6 +1122,5 @@ function showError(message) {
     }
   }, 5000);
 }
-
 // Handle page unload
 window.addEventListener("beforeunload", cleanupRoom);

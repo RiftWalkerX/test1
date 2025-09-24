@@ -1,4 +1,3 @@
-// Update room-invites.js imports
 import { db, auth } from "./firebase-init.js";
 import {
   collection,
@@ -12,15 +11,38 @@ import {
   getDoc,
   arrayUnion,
   serverTimestamp,
-  deleteDoc, // Add this
-  deleteField, // Add this if needed
+  deleteDoc,
+  deleteField,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// Cooldown management
+const inviteCooldowns = new Map();
 
 // --- SEND ROOM INVITE ---
 export const sendRoomInvite = async function (roomId, quizType, friendId) {
   try {
     const user = auth.currentUser;
     if (!user) return;
+
+    // Enhanced spam prevention
+    const now = Date.now();
+    const userKey = `${user.uid}-${friendId}`;
+
+    if (inviteCooldowns.has(userKey)) {
+      const lastInviteTime = inviteCooldowns.get(userKey);
+      if (now - lastInviteTime < 10000) {
+        // 10 seconds cooldown
+        document.dispatchEvent(
+          new CustomEvent("showToast", {
+            detail: {
+              message: "يجب الانتظار 10 ثوانٍ قبل إرسال دعوة أخرى",
+              type: "warning",
+            },
+          })
+        );
+        return;
+      }
+    }
 
     // Spam prevention: Check if user has sent too many invites recently
     const recentInvitesRef = collection(db, "roomInvites");
@@ -75,8 +97,10 @@ export const sendRoomInvite = async function (roomId, quizType, friendId) {
       fromUserName: user.displayName || "مستخدم",
       toUserId: friendId,
       status: "pending",
-      createdAt: serverTimestamp(), // Use serverTimestamp for consistency
+      createdAt: serverTimestamp(),
     });
+
+    inviteCooldowns.set(userKey, now);
 
     document.dispatchEvent(
       new CustomEvent("showToast", {
@@ -85,6 +109,7 @@ export const sendRoomInvite = async function (roomId, quizType, friendId) {
     );
   } catch (error) {
     console.error("Error sending room invite:", error);
+    inviteCooldowns.delete(userKey);
     document.dispatchEvent(
       new CustomEvent("showToast", {
         detail: {
@@ -299,7 +324,7 @@ window.declineRoomInvite = async function (inviteId) {
     const inviteRef = doc(db, "roomInvites", inviteId);
     await updateDoc(inviteRef, {
       status: "declined",
-      respondedAt: serverTimestamp(), // Use serverTimestamp instead of new Date()
+      respondedAt: serverTimestamp(),
     });
     await loadRoomInvites();
     document.dispatchEvent(
@@ -349,7 +374,7 @@ export const setupRoomInviteListener = function () {
   });
 };
 
-// Helper function for toast notifications (if not available globally)
+// Helper function for toast notifications
 function showToast(message, type = "info") {
   document.dispatchEvent(
     new CustomEvent("showToast", { detail: { message, type } })
