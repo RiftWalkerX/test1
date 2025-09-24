@@ -396,13 +396,8 @@ function initApp() {
         console.warn("No user data found in Firestore");
         // Create a basic user profile with minimal data
         updateValue("user-name", user.displayName || "مستخدم");
-        updateValue("user-title", "");
-        updateValue(
-          "user-join-date",
-          `عضو منذ: ${new Date(user.metadata.creationTime).toLocaleDateString(
-            "ar-EG"
-          )}`
-        );
+        updateValue("user-title", user.uid);
+
         updateValue("user-rank", "#—");
 
         // Set default stats
@@ -432,14 +427,7 @@ function initApp() {
         "user-name",
         data.displayName || user.displayName || "مستخدم"
       );
-      updateValue("user-title", data.title || "");
-      updateValue(
-        "user-join-date",
-        `عضو منذ: ${
-          data.joinDate ||
-          new Date(user.metadata.creationTime).toLocaleDateString("ar-EG")
-        }`
-      );
+      updateValue("user-title", data.uid || user.uid || " كود المستخدم");
 
       // FIXED: Handle rank properly - check multiple possible fields
       const userRank = data.rank || data.ranking || data.globalRank || "—";
@@ -567,13 +555,8 @@ function initApp() {
 
       // Update user info with fallback data
       updateValue("user-name", user.displayName || "مستخدم");
-      updateValue("user-title", "مستخدم جديد");
-      updateValue(
-        "user-join-date",
-        `عضو منذ: ${new Date(user.metadata.creationTime).toLocaleDateString(
-          "ar-EG"
-        )}`
-      );
+      updateValue("user-title", user.uid);
+
       updateValue("user-rank", "#—");
 
       // Set default stats
