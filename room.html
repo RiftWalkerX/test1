@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
 </head>
 <body class="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 font-cairo rtl-support">
     <!-- Background Pattern -->
@@ -61,10 +62,7 @@
                         <span class="text-lg">🔥</span>
                         <span class="text-white font-medium" id="currentStreak">0</span>
                     </div>
-                    <div class="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-2">
-                        <span class="text-lg">⏱️</span>
-                        <span class="text-white font-medium" id="timer">30</span>
-                    </div>
+                    <!-- Timer removed for single-player mode -->
                 </div>
             </div>
         </div>
@@ -76,8 +74,8 @@
             <!-- Players Status Bar -->
             <div class="bg-white/10 backdrop-blur-lg rounded-2xl p-6 mb-6 border border-white/20">
                 <div class="flex items-center justify-between mb-4">
-                    <h2 class="text-lg font-bold text-white">اللاعبون</h2>
-                    <!-- Add Question Progress Display -->
+                    <h2 class="text-lg font-bold text-white">التقدم</h2>
+                    <!-- Question Progress Display -->
                     <div class="text-blue-200 text-sm">
                         سؤال <span id="currentQuestion">1</span> من <span id="totalQuestions">10</span>
                     </div>
@@ -98,6 +96,13 @@
                     </div>
                     <h3 class="text-xl font-bold text-white mb-2">جاري تحميل السؤال...</h3>
                     <p class="text-blue-200">استعد للبدء!</p>
+                </div>
+
+                <!-- Answer Feedback Section -->
+                <div id="answerFeedback" class="hidden mb-6 p-6 rounded-lg text-center">
+                    <div id="feedbackText" class="text-lg font-semibold mb-2"></div>
+                    <div id="explanationText" class="text-white/80 mb-3"></div>
+                    <div class="text-blue-300 text-sm">الانتقال إلى السؤال التالي...</div>
                 </div>
 
                 <!-- Question Content -->
@@ -146,7 +151,9 @@
                             <p class="text-blue-200">حدد الرسائل التي تحتوي على محاولات احتيال</p>
                         </div>
                         <div class="bg-white/5 rounded-xl p-6 mb-8 border border-white/10 max-h-96 overflow-y-auto">
-                            <div class="space-y-4" id="dialogueMessages"></div>
+                            <div class="space-y-4" id="dialogueMessages">
+                                <!-- Dialogue messages with checkboxes will be populated here -->
+                            </div>
                         </div>
                     </div>
 
@@ -195,7 +202,7 @@
                     </button>
                 </div>
 
-                <!-- Waiting for Players -->
+                <!-- Waiting for Players (Hidden in single-player mode) -->
                 <div id="waitingState" class="text-center py-12 hidden">
                     <div class="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-full flex items-center justify-center">
                         <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -206,7 +213,7 @@
                     <p class="text-blue-200" id="waitingText">جاري انتظار باقي اللاعبين للإجابة</p>
                 </div>
 
-                <!-- Results Display -->
+                <!-- Results Display (Hidden in single-player mode) -->
                 <div id="resultsState" class="text-center py-8 hidden">
                     <div class="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-green-500 to-blue-600 rounded-full flex items-center justify-center">
                         <span class="text-white text-2xl" id="resultIcon">✓</span>

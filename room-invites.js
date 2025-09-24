@@ -1,4 +1,4 @@
-// room-invites.js - Fixed version with proper imports
+// Update room-invites.js imports
 import { db, auth } from "./firebase-init.js";
 import {
   collection,
@@ -10,8 +10,10 @@ import {
   updateDoc,
   onSnapshot,
   getDoc,
-  arrayUnion, // ADD THIS IMPORT
-  serverTimestamp, // ADD THIS IMPORT
+  arrayUnion,
+  serverTimestamp,
+  deleteDoc, // Add this
+  deleteField, // Add this if needed
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // --- SEND ROOM INVITE ---
@@ -19,6 +21,28 @@ export const sendRoomInvite = async function (roomId, quizType, friendId) {
   try {
     const user = auth.currentUser;
     if (!user) return;
+
+    // Spam prevention: Check if user has sent too many invites recently
+    const recentInvitesRef = collection(db, "roomInvites");
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const spamCheckQuery = query(
+      recentInvitesRef,
+      where("fromUserId", "==", user.uid),
+      where("createdAt", ">", oneHourAgo)
+    );
+
+    const recentInvites = await getDocs(spamCheckQuery);
+    if (recentInvites.size >= 10) {
+      document.dispatchEvent(
+        new CustomEvent("showToast", {
+          detail: {
+            message: "لقد وصلت إلى الحد الأقصى للدعوات لهذه الساعة.",
+            type: "warning",
+          },
+        })
+      );
+      return;
+    }
 
     // Prevent duplicate invites
     const existingInvitesRef = collection(db, "roomInvites");
@@ -40,6 +64,7 @@ export const sendRoomInvite = async function (roomId, quizType, friendId) {
       );
       return;
     }
+
     // Create new invitation
     const inviteRef = doc(collection(db, "roomInvites"));
     await setDoc(inviteRef, {
@@ -50,14 +75,16 @@ export const sendRoomInvite = async function (roomId, quizType, friendId) {
       fromUserName: user.displayName || "مستخدم",
       toUserId: friendId,
       status: "pending",
-      createdAt: new Date(),
+      createdAt: serverTimestamp(), // Use serverTimestamp for consistency
     });
+
     document.dispatchEvent(
       new CustomEvent("showToast", {
         detail: { message: "تم إرسال دعوة الغرفة بنجاح!", type: "success" },
       })
     );
   } catch (error) {
+    console.error("Error sending room invite:", error);
     document.dispatchEvent(
       new CustomEvent("showToast", {
         detail: {
@@ -68,6 +95,31 @@ export const sendRoomInvite = async function (roomId, quizType, friendId) {
     );
   }
 };
+
+// Add automatic invite cleanup
+export const cleanupExpiredInvites = async function () {
+  try {
+    const invitesRef = collection(db, "roomInvites");
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const expiredQuery = query(
+      invitesRef,
+      where("createdAt", "<", twentyFourHoursAgo),
+      where("status", "==", "pending")
+    );
+
+    const expiredInvites = await getDocs(expiredQuery);
+    const updatePromises = expiredInvites.docs.map((doc) =>
+      updateDoc(doc.ref, { status: "expired" })
+    );
+
+    await Promise.all(updatePromises);
+  } catch (error) {
+    console.error("Error cleaning up expired invites:", error);
+  }
+};
+
+// Call cleanup periodically
+setInterval(cleanupExpiredInvites, 60 * 60 * 1000); // Cleanup every hour
 
 // --- LOAD ROOM INVITES ---
 export const loadRoomInvites = async function () {
@@ -120,7 +172,7 @@ export const loadRoomInvites = async function () {
                   invite.quizType || "تدريب جماعي"
                 }</h5>
                 <p class="text-purple-200 text-sm">دعوة من ${
-                  fromUserData.displayName || "مستخدم" // FIXED: fromUserData.fromUserName should be fromUserData.displayName
+                  fromUserData.displayName || "مستخدم"
                 }</p>
               </div>
             </div>

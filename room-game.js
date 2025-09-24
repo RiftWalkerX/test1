@@ -13,6 +13,7 @@ import {
   orderBy,
   serverTimestamp,
   arrayUnion,
+  deleteDoc,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Game state management
@@ -125,7 +126,14 @@ async function loadRoomData() {
   }
 
   const roomData = roomDoc.data();
-  gameState.quizType = roomData.quizType || "mixed";
+
+  // Fix quiz type inconsistencies
+  let quizType = roomData.quizType || "mixed";
+  if (quizType === "mixer" || quizType === "tmixed") {
+    quizType = "mixed";
+  }
+
+  gameState.quizType = quizType;
   gameState.totalQuestions = roomData.questionCount || 10;
   gameState.players = roomData.players || [];
 
@@ -178,7 +186,9 @@ async function generateQuestions(quizType, count) {
   let allQuestions = [];
 
   try {
-    // Fetch questions based on quiz type with proper error handling
+    console.log("Generating questions for type:", quizType);
+
+    // Fetch questions based on quiz type
     if (quizType === "sms" || quizType === "mixed") {
       try {
         const smsQuestions = await fetchSMSQuestions(timestamp);
@@ -186,7 +196,7 @@ async function generateQuestions(quizType, count) {
         console.log("Loaded SMS questions:", smsQuestions.length);
       } catch (error) {
         console.error("Failed to load SMS questions, using fallback:", error);
-        const fallbackSMS = generateFallbackQuestions(5, "sms");
+        const fallbackSMS = generateFallbackQuestions(3, "sms");
         allQuestions = allQuestions.concat(fallbackSMS);
       }
     }
@@ -198,8 +208,24 @@ async function generateQuestions(quizType, count) {
         console.log("Loaded image questions:", imageQuestions.length);
       } catch (error) {
         console.error("Failed to load image questions, using fallback:", error);
-        const fallbackImage = generateFallbackQuestions(5, "image");
+        const fallbackImage = generateFallbackQuestions(3, "image");
         allQuestions = allQuestions.concat(fallbackImage);
+      }
+    }
+
+    // Add dialogue questions if mixed mode
+    if (quizType === "mixed") {
+      try {
+        const dialogueQuestions = await fetchDialogueQuestions(timestamp);
+        allQuestions = allQuestions.concat(dialogueQuestions);
+        console.log("Loaded dialogue questions:", dialogueQuestions.length);
+      } catch (error) {
+        console.error(
+          "Failed to load dialogue questions, using fallback:",
+          error
+        );
+        const fallbackDialogue = generateFallbackQuestions(2, "dialogue");
+        allQuestions = allQuestions.concat(fallbackDialogue);
       }
     }
 
@@ -208,7 +234,7 @@ async function generateQuestions(quizType, count) {
     // If we don't have enough questions, create more fallback questions
     if (allQuestions.length < count) {
       const needed = count - allQuestions.length;
-      const additionalQuestions = generateFallbackQuestions(needed, "mixed");
+      const additionalQuestions = generateFallbackQuestions(needed, quizType);
       allQuestions = allQuestions.concat(additionalQuestions);
       console.log("Added fallback questions:", additionalQuestions.length);
     }
@@ -220,8 +246,7 @@ async function generateQuestions(quizType, count) {
     return allQuestions;
   } catch (error) {
     console.error("Error generating questions:", error);
-    // Return fallback questions if everything fails
-    return generateFallbackQuestions(count, "mixed");
+    return generateFallbackQuestions(count, quizType);
   }
 }
 
@@ -253,7 +278,7 @@ async function fetchSMSQuestions(timestamp) {
     }));
   } catch (error) {
     console.error("Error fetching SMS questions:", error);
-    throw error; // Re-throw to be handled by caller
+    throw error;
   }
 }
 
@@ -284,7 +309,37 @@ async function fetchImageQuestions(timestamp) {
     }));
   } catch (error) {
     console.error("Error fetching image questions:", error);
-    throw error; // Re-throw to be handled by caller
+    throw error;
+  }
+}
+
+async function fetchDialogueQuestions(timestamp) {
+  try {
+    const response = await fetch(
+      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${timestamp}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!Array.isArray(data)) {
+      throw new Error("Invalid data format: expected array");
+    }
+
+    return data.map((dialogue, index) => ({
+      id: `dialogue-${timestamp}-${index}`,
+      type: "dialogue",
+      messages: dialogue.messages || [],
+      correctAnswers: dialogue.correctAnswers || [],
+      difficulty: dialogue.difficulty || 3,
+      explanation: dialogue.explanation || "لا توجد تفاصيل إضافية",
+    }));
+  } catch (error) {
+    console.error("Error fetching dialogue questions:", error);
+    throw error;
   }
 }
 
@@ -294,9 +349,7 @@ function generateFallbackQuestions(count, type = "mixed") {
   for (let i = 0; i < count; i++) {
     const isPhishing = Math.random() > 0.5;
     const questionTypes =
-      type === "mixed"
-        ? ["sms", "image"][Math.floor(Math.random() * 2)] // Remove dialogue option
-        : type;
+      type === "mixed" ? ["sms", "image"][Math.floor(Math.random() * 2)] : type;
 
     if (questionTypes === "sms") {
       questions.push({
@@ -348,8 +401,6 @@ function setupRoomListeners() {
       handleRoomUpdate(roomData);
     }
   });
-
-  // Remove answers listener since we don't need to wait for other players
 }
 
 function handleRoomUpdate(roomData) {
@@ -438,12 +489,15 @@ function loadCurrentQuestion() {
   document.getElementById("answerFeedback").classList.add("hidden");
   document.getElementById("smsQuestion").classList.add("hidden");
   document.getElementById("imageQuestion").classList.add("hidden");
+  document.getElementById("dialogueQuestion").classList.add("hidden");
 
   // Show appropriate question type
   if (question.type === "sms") {
     loadSMSQuestion(question);
   } else if (question.type === "image") {
     loadImageQuestion(question);
+  } else if (question.type === "dialogue") {
+    loadDialogueQuestion(question);
   }
 
   // Update difficulty indicator
@@ -451,6 +505,51 @@ function loadCurrentQuestion() {
 
   // Set up answer buttons
   setupAnswerButtons(question);
+}
+
+function loadDialogueQuestion(question) {
+  const dialogueQuestion = document.getElementById("dialogueQuestion");
+  dialogueQuestion.classList.remove("hidden");
+
+  const dialogueMessages = document.getElementById("dialogueMessages");
+  dialogueMessages.innerHTML = "";
+
+  if (question.messages && Array.isArray(question.messages)) {
+    question.messages.forEach((message, index) => {
+      const messageElement = document.createElement("div");
+      messageElement.className = `flex items-start gap-3 ${
+        message.isUser ? "justify-end" : "justify-start"
+      }`;
+
+      messageElement.innerHTML = `
+        <div class="flex ${
+          message.isUser ? "flex-row-reverse" : "flex-row"
+        } items-start gap-3 max-w-[80%]">
+          <div class="w-8 h-8 rounded-full flex items-center justify-center ${
+            message.isUser ? "bg-blue-500" : "bg-gray-500"
+          }">
+            <span class="text-white text-sm">${
+              message.isUser ? "أنت" : "هم"
+            }</span>
+          </div>
+          <div class="bg-white/10 rounded-lg p-3 ${
+            message.isUser ? "rounded-tr-none" : "rounded-tl-none"
+          }">
+            <p class="text-white">${message.text || "لا يوجد نص"}</p>
+            <div class="flex items-center gap-2 mt-2">
+              <input type="checkbox" id="msg-${index}" class="w-4 h-4 rounded border-white/30 bg-white/10">
+              <label for="msg-${index}" class="text-white/70 text-sm">علامة احتيال</label>
+            </div>
+          </div>
+        </div>
+      `;
+
+      dialogueMessages.appendChild(messageElement);
+    });
+  }
+
+  // Show submit button for dialogue questions
+  submitDialogueBtn.classList.remove("hidden");
 }
 
 function loadSMSQuestion(question) {
@@ -482,12 +581,6 @@ function loadImageQuestion(question) {
   }
 }
 
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
 function updateDifficultyIndicator(difficulty) {
   const stars = document.querySelectorAll(".difficulty-star");
   const labels = ["سهل", "متوسط", "صعب", "خبير", "متقدم"];
@@ -502,8 +595,7 @@ function updateDifficultyIndicator(difficulty) {
     }
   });
 
-  const difficultyLabel =
-    document.querySelector("#difficultyStars").nextElementSibling;
+  const difficultyLabel = document.querySelector("#difficultyStars + span");
   if (difficultyLabel) {
     difficultyLabel.textContent = labels[difficulty - 1] || "متوسط";
   }
@@ -513,60 +605,78 @@ function setupAnswerButtons(question) {
   // Remove existing event listeners
   const newSafeBtn = safeBtn.cloneNode(true);
   const newPhishingBtn = phishingBtn.cloneNode(true);
+  const newSubmitBtn = submitDialogueBtn.cloneNode(true);
 
   safeBtn.parentNode.replaceChild(newSafeBtn, safeBtn);
   phishingBtn.parentNode.replaceChild(newPhishingBtn, phishingBtn);
+  submitDialogueBtn.parentNode.replaceChild(newSubmitBtn, submitDialogueBtn);
 
   safeBtn = newSafeBtn;
   phishingBtn = newPhishingBtn;
+  submitDialogueBtn = newSubmitBtn;
 
   // Enable buttons
   safeBtn.disabled = false;
   phishingBtn.disabled = false;
+  submitDialogueBtn.disabled = false;
 
-  // Add new event listeners
-  safeBtn.addEventListener("click", () => handleAnswer("safe", question));
-  phishingBtn.addEventListener("click", () =>
-    handleAnswer("phishing", question)
-  );
+  // Add new event listeners based on question type
+  if (question.type === "dialogue") {
+    safeBtn.classList.add("hidden");
+    phishingBtn.classList.add("hidden");
+    submitDialogueBtn.classList.remove("hidden");
 
-  // Hide dialogue submit button since we removed dialogue questions
-  submitDialogueBtn.classList.add("hidden");
+    submitDialogueBtn.addEventListener("click", () =>
+      handleDialogueAnswer(question)
+    );
+  } else {
+    safeBtn.classList.remove("hidden");
+    phishingBtn.classList.remove("hidden");
+    submitDialogueBtn.classList.add("hidden");
+
+    safeBtn.addEventListener("click", () => handleAnswer("safe", question));
+    phishingBtn.addEventListener("click", () =>
+      handleAnswer("phishing", question)
+    );
+  }
 }
 
-async function handleAnswer(answer, question) {
+async function handleDialogueAnswer(question) {
   if (gameState.hasAnswered) return;
 
   gameState.hasAnswered = true;
-
-  // Disable answer buttons immediately
-  safeBtn.disabled = true;
-  phishingBtn.disabled = true;
+  submitDialogueBtn.disabled = true;
 
   try {
-    // Calculate if answer is correct
-    const isCorrect = answer === question.correctAnswer;
+    // Get selected messages
+    const selectedMessages = [];
+    const checkboxes = document.querySelectorAll(
+      '#dialogueMessages input[type="checkbox"]'
+    );
 
-    // Update player score
+    checkboxes.forEach((checkbox, index) => {
+      if (checkbox.checked) {
+        selectedMessages.push(index);
+      }
+    });
+
+    // Check if answer is correct (simplified logic)
+    const isCorrect =
+      JSON.stringify(selectedMessages.sort()) ===
+      JSON.stringify(question.correctAnswers.sort());
+
+    // Update score
     if (isCorrect) {
       gameState.score += 50;
-
-      // Update streak
       const currentStreak = parseInt(currentStreakElement.textContent) || 0;
       currentStreakElement.textContent = currentStreak + 1;
-
-      // Update points
       const currentPoints = parseInt(userPointsElement.textContent) || 0;
       userPointsElement.textContent = currentPoints + 50;
     }
 
-    // Save answer to Firestore
-    await saveAnswer(answer, isCorrect);
-
-    // Show immediate feedback instead of waiting
+    await saveAnswer(`dialogue:${selectedMessages.join(",")}`, isCorrect);
     showAnswerFeedback(isCorrect, question.explanation);
 
-    // Wait a moment then go to next question
     setTimeout(() => {
       gameState.currentQuestion++;
       if (gameState.currentQuestion < gameState.questions.length) {
@@ -574,10 +684,9 @@ async function handleAnswer(answer, question) {
       } else {
         showGameOver();
       }
-    }, 2000); // 2 second delay to show feedback
+    }, 2000);
   } catch (error) {
-    console.error("Error handling answer:", error);
-    // Even if saving fails, continue to next question
+    console.error("Error handling dialogue answer:", error);
     gameState.currentQuestion++;
     if (gameState.currentQuestion < gameState.questions.length) {
       loadCurrentQuestion();
@@ -587,116 +696,256 @@ async function handleAnswer(answer, question) {
   }
 }
 
-function showAnswerFeedback(isCorrect, explanation) {
-  // Hide question content
-  questionContent.classList.add("hidden");
+async function handleAnswer(answer, question) {
+  if (gameState.hasAnswered) return;
 
-  // Show feedback
-  const feedbackElement = document.getElementById("answerFeedback");
-  const feedbackText = document.getElementById("feedbackText");
-  const explanationText = document.getElementById("explanationText");
+  gameState.hasAnswered = true;
+  safeBtn.disabled = true;
+  phishingBtn.disabled = true;
 
-  if (feedbackElement && feedbackText && explanationText) {
-    feedbackElement.className = `p-6 rounded-lg text-center ${
-      isCorrect
-        ? "bg-green-100 border border-green-400"
-        : "bg-red-100 border border-red-400"
-    }`;
+  const isCorrect = answer === question.correctAnswer;
 
-    feedbackText.innerHTML = isCorrect
-      ? '<span class="text-green-800 font-bold">✓ إجابة صحيحة!</span>'
-      : '<span class="text-red-800 font-bold">✗ إجابة خاطئة</span>';
+  try {
+    // Update score
+    if (isCorrect) {
+      gameState.score += 50;
+      const currentStreak = parseInt(currentStreakElement.textContent) || 0;
+      currentStreakElement.textContent = currentStreak + 1;
+      const currentPoints = parseInt(userPointsElement.textContent) || 0;
+      userPointsElement.textContent = currentPoints + 50;
+    }
 
-    explanationText.textContent = explanation || "لا توجد تفاصيل إضافية";
+    await saveAnswer(answer, isCorrect);
+    showAnswerFeedback(isCorrect, question.explanation);
 
-    feedbackElement.classList.remove("hidden");
+    // Move to next question after delay
+    setTimeout(() => {
+      gameState.currentQuestion++;
+      if (gameState.currentQuestion < gameState.questions.length) {
+        loadCurrentQuestion();
+      } else {
+        showGameOver();
+      }
+    }, 2000);
+  } catch (error) {
+    console.error("Error handling answer:", error);
+    // Continue to next question even if there's an error
+    gameState.currentQuestion++;
+    if (gameState.currentQuestion < gameState.questions.length) {
+      loadCurrentQuestion();
+    } else {
+      showGameOver();
+    }
   }
 }
 
 async function saveAnswer(answer, isCorrect) {
   try {
-    const answersRef = collection(db, `rooms/${currentRoomId}/answers`);
-    const answerDoc = doc(
-      answersRef,
-      `${currentUser.uid}_${gameState.currentQuestion}`
+    const answerRef = doc(
+      collection(db, `rooms/${currentRoomId}/answers`),
+      currentUser.uid + "_" + gameState.currentQuestion
     );
 
-    await setDoc(answerDoc, {
-      userId: currentUser.uid,
-      userName: currentUser.displayName || "لاعب",
+    await setDoc(answerRef, {
+      playerId: currentUser.uid,
+      playerName: currentUser.displayName || "لاعب",
       questionIndex: gameState.currentQuestion,
       answer: answer,
       isCorrect: isCorrect,
       timestamp: serverTimestamp(),
     });
 
-    console.log("Answer saved successfully");
+    // Update player score in room
+    const roomRef = doc(db, "rooms", currentRoomId);
+    await updateDoc(roomRef, {
+      players: gameState.players.map((player) =>
+        player.uid === currentUser.uid
+          ? { ...player, score: gameState.score }
+          : player
+      ),
+    });
   } catch (error) {
     console.error("Error saving answer:", error);
+    throw error;
   }
 }
 
-function showGameOver() {
-  // Show game over modal with final scores
-  const gameOverModal = document.getElementById("gameOverModal");
-  const finalScores = document.getElementById("finalScores");
+function showAnswerFeedback(isCorrect, explanation) {
+  const feedbackElement = document.getElementById("answerFeedback");
 
-  if (gameOverModal && finalScores) {
-    // Populate final scores
-    finalScores.innerHTML = "";
+  // Check if elements exist before trying to modify them
+  if (!feedbackElement) {
+    console.warn("Feedback element not found");
+    return;
+  }
 
-    gameState.players
-      .sort((a, b) => (b.score || 0) - (a.score || 0))
-      .forEach((player, index) => {
-        const playerElement = document.createElement("div");
-        playerElement.className = "flex items-center justify-between py-2";
+  // Create feedback content safely
+  let feedbackContent = "";
 
-        playerElement.innerHTML = `
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <span class="text-white font-bold text-sm">${
-                player.displayName?.charAt(0) || "?"
-              }</span>
-            </div>
-            <div>
-              <p class="text-gray-900 font-medium">${player.displayName}</p>
-              ${
-                player.isHost
-                  ? '<span class="text-yellow-600 text-xs">المضيف</span>'
-                  : ""
-              }
-            </div>
-          </div>
-          <div class="text-lg font-bold ${
-            index === 0 ? "text-yellow-600" : "text-gray-700"
-          }">
-            ${player.score || 0} نقطة
-          </div>
-        `;
+  if (isCorrect) {
+    feedbackElement.className =
+      "bg-gradient-to-r from-green-500/20 to-emerald-600/20 border-2 border-green-500/50 mb-6 p-6 rounded-lg text-center";
+    feedbackContent = `
+      <div class="text-lg font-semibold mb-2">إجابة صحيحة!</div>
+      <div class="text-white/80 mb-3">${
+        explanation || "لا توجد تفاصيل إضافية"
+      }</div>
+      <div class="text-blue-300 text-sm">الانتقال إلى السؤال التالي...</div>
+    `;
+  } else {
+    feedbackElement.className =
+      "bg-gradient-to-r from-red-500/20 to-pink-600/20 border-2 border-red-500/50 mb-6 p-6 rounded-lg text-center";
+    feedbackContent = `
+      <div class="text-lg font-semibold mb-2">إجابة خاطئة</div>
+      <div class="text-white/80 mb-3">${
+        explanation || "لا توجد تفاصيل إضافية"
+      }</div>
+      <div class="text-blue-300 text-sm">الانتقال إلى السؤال التالي...</div>
+    `;
+  }
 
-        finalScores.appendChild(playerElement);
-      });
+  feedbackElement.innerHTML = feedbackContent;
+  feedbackElement.classList.remove("hidden");
+}
 
-    // Set up modal buttons
-    document.getElementById("playAgainBtn").addEventListener("click", () => {
-      window.location.reload();
+async function showGameOver() {
+  try {
+    // Hide all other states
+    questionContent.classList.add("hidden");
+    waitingState.classList.add("hidden");
+    loadingState.classList.add("hidden");
+
+    // Show results state
+    resultsState.classList.remove("hidden");
+
+    // Update final score display
+    const finalScoreElement = document.getElementById("finalScore");
+    if (finalScoreElement) {
+      finalScoreElement.textContent = gameState.score;
+    }
+
+    // Calculate accuracy
+    const accuracy =
+      gameState.questions.length > 0
+        ? Math.round(
+            (gameState.score / (gameState.questions.length * 50)) * 100
+          )
+        : 0;
+
+    const accuracyElement = document.getElementById("finalAccuracy");
+    if (accuracyElement) {
+      accuracyElement.textContent = `${accuracy}%`;
+    }
+
+    // Update room status in Firebase
+    await updateRoomStatus();
+
+    // Save game results to user's history
+    await saveGameResults(accuracy);
+
+    // Show game over modal after a delay
+    setTimeout(() => {
+      const gameOverModal = document.getElementById("gameOverModal");
+      if (gameOverModal) {
+        gameOverModal.classList.remove("hidden");
+
+        // Set up modal buttons
+        const playAgainBtn = document.getElementById("playAgainBtn");
+        const closeModalBtn = document.getElementById("closeModalBtn");
+
+        if (playAgainBtn) {
+          playAgainBtn.onclick = function () {
+            window.location.reload();
+          };
+        }
+
+        if (closeModalBtn) {
+          closeModalBtn.onclick = function () {
+            window.location.href = "dashboard.html";
+          };
+        }
+      }
+    }, 2000);
+  } catch (error) {
+    console.error("Error in showGameOver:", error);
+  }
+}
+
+async function saveGameResults(accuracy) {
+  try {
+    if (!currentUser) return;
+
+    const gameResult = {
+      roomId: currentRoomId,
+      score: gameState.score,
+      totalQuestions: gameState.questions.length,
+      accuracy: accuracy,
+      quizType: gameState.quizType,
+      completedAt: serverTimestamp(),
+      players: gameState.players.map((p) => ({
+        uid: p.uid,
+        displayName: p.displayName,
+        score: p.score,
+      })),
+    };
+
+    // Save to user's game history
+    const historyRef = doc(
+      collection(db, `users/${currentUser.uid}/gameHistory`),
+      currentRoomId
+    );
+    await setDoc(historyRef, gameResult);
+  } catch (error) {
+    console.error("Error saving game results:", error);
+  }
+}
+
+async function updateRoomStatus() {
+  try {
+    const roomRef = doc(db, "rooms", currentRoomId);
+    await updateDoc(roomRef, {
+      status: "ended",
+      endedAt: serverTimestamp(),
+      finalScores: gameState.players.map((player) => ({
+        uid: player.uid,
+        displayName: player.displayName,
+        score: player.score,
+      })),
     });
-
-    document.getElementById("closeModalBtn").addEventListener("click", () => {
-      window.location.href = "dashboard.html";
-    });
-
-    gameOverModal.classList.remove("hidden");
+  } catch (error) {
+    console.error("Error updating room status:", error);
   }
 }
 
 function showError(message) {
-  // Simple error display - you might want to implement a more sophisticated error UI
-  alert(message);
+  const errorElement = document.createElement("div");
+  errorElement.className =
+    "fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50";
+  errorElement.textContent = message;
+
+  document.body.appendChild(errorElement);
+
+  setTimeout(() => {
+    errorElement.remove();
+  }, 5000);
 }
 
-// Export for potential use elsewhere
-window.roomGame = {
-  initializeGame,
-  loadGame,
-};
+// Cleanup function
+async function cleanupRoom() {
+  try {
+    const roomRef = doc(db, "rooms", currentRoomId);
+    await deleteDoc(roomRef);
+  } catch (error) {
+    console.error("Error cleaning up room:", error);
+  }
+}
+
+// Add event listener for the "Back to Dashboard" button
+document.addEventListener("DOMContentLoaded", function () {
+  const backToDashboardBtn = document.getElementById("closeModalBtn");
+  if (backToDashboardBtn) {
+    backToDashboardBtn.addEventListener("click", function () {
+      window.location.href = "dashboard.html";
+    });
+  }
+});
