@@ -396,7 +396,7 @@ function initApp() {
         console.warn("No user data found in Firestore");
         // Create a basic user profile with minimal data
         updateValue("user-name", user.displayName || "مستخدم");
-        updateValue("user-title", user.uid);
+        updateValue("user-title","user id :" + user.uid);
 
         updateValue("user-rank", "#—");
 
@@ -427,7 +427,9 @@ function initApp() {
         "user-name",
         data.displayName || user.displayName || "مستخدم"
       );
-      updateValue("user-title", data.uid || user.uid || " كود المستخدم");
+      updateValue(
+        "user-title",  data.uid ||"USER ID:   "+ user.uid || " كود المستخدم"
+      );
 
       // FIXED: Handle rank properly - check multiple possible fields
       const userRank = data.rank || data.ranking || data.globalRank || "—";
