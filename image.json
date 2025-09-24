@@ -1,0 +1,132 @@
+[
+  {
+    "id": "1",
+    "title": "Yahoo Login Email",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-yahoo.png",
+    "isPhish": true,
+    "explanation": "Suspicious domain and urgent login prompt."
+  },
+  {
+    "id": "2",
+    "title": "PayPal Login Page",
+    "text": "https://cdn.kastatic.org/ka-perseus-images/a434d35ce5a499b4d48f764a19e4bd74b7a53cf5.png",
+    "isPhish": true,
+    "explanation": "Unofficial link."
+  },
+  {
+    "id": "3",
+    "title": "Google Docs",
+    "text": "https://lh3.googleusercontent.com/uTWvxf7NR7alzT_VEF1wD31v3l6CeKG7M7nN4wpa-Z_nSGb5xsMUi19RTUTKQimqbu0=w577",
+    "isPhish": true,
+    "explanation": "صفحة مزيفة لتسجيل الدخول إلى Google."
+  },
+  {
+    "id": "4",
+    "title": "Bank of America",
+    "text": "https://lh3.googleusercontent.com/M1marY2U0TpG5jlbdOE-ISvmUaoLErD03-95JxDdxD89VDuUmgmctDiOOMmKOzZxB2Q=w280",
+    "isPhish": true,
+    "explanation": "نافذة منبثقة مخادعة تهدف إلى خداع المستخدم لحثّه على تثبيت برامج ضارة"
+  },
+  {
+    "id": "5",
+    "title": "eBay Login",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-ebay.png",
+    "isPhish": true,
+    "explanation": "Untrusted domain mimicking eBay."
+  },
+
+
+  {
+    "id": "6",
+    "title": "Facebook Login",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-facebook.png",
+    "isPhish": false,
+    "explanation": "The correct domain of Facebook"
+  },
+
+  {
+    "id": "7",
+    "title": "Dropbox Login",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-dropbox.png",
+    "isPhish": false,
+    "explanation": "The correct domain of Dropbox"
+  },
+  {
+    "id": "8",
+    "title": "HSBC",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-hsbc.png",
+    "isPhish": false,
+    "explanation": "النطاق صحيح ومطابق للموقع الرسمي لبنك HSBC، ولا يحتوي على أي مؤشرات تصيّد."
+  },
+  {
+    "id": "9",
+    "title": "Twitter",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-twitter.png",
+    "isPhish": true,
+    "explanation": "الصفحة تحاكي تويتر لكنها ليست على النطاق الرسمي twitter.com، مما يدل على أنها صفحة تصيّد."
+  },
+  {
+    "id": "10",
+    "title": "American Airlines",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-americanair.png",
+    "isPhish": true,
+    "explanation": "الموقع يستخدم نطاقاً مشابهاً لكنه ليس النطاق الرسمي لـ American Airlines، مؤشر على عملية تصيّد."
+  },
+  {
+    "id": "11",
+    "title": "Amazon",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-amazon.png",
+    "isPhish": false,
+    "explanation": "النطاق هو amazon.com الرسمي، ما يجعله موقعاً حقيقياً غير احتيالي."
+  },
+  {
+    "id": "12",
+    "title": "PayPal",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-paypal.png",
+    "isPhish": true,
+    "explanation": "الصفحة مزيفة وتستخدم نطاقاً غير رسمي، ما يكشف أنها محاولة لتصيد بيانات تسجيل الدخول في PayPal."
+  },
+  {
+    "id": "13",
+    "title": "Xfinity",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-xfinity.png",
+    "isPhish": false,
+    "explanation": "النطاق صحيح ويعود إلى Xfinity، وبالتالي الصفحة أصلية وليست محاولة احتيال."
+  },
+  {
+    "id": "14",
+    "title": "Amazon",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-amazon2.png",
+    "isPhish": true,
+    "explanation": "هذه الصفحة مزيّفة تستخدم دومين غير رسمي يشبه Amazon لخداع المستخدمين."
+  },
+  {
+    "id": "15",
+    "title": "Hulu",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-hulu.png",
+    "isPhish": false,
+    "explanation": "النطاق تابع لـ Hulu الرسمي، وبالتالي لا توجد علامات على محاولة تصيّد."
+  },
+  {
+    "id": "16",
+    "title": "Zynga",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-zynga.png",
+    "isPhish": true,
+    "explanation": "الموقع ينتحل هوية Zynga لكنه غير مستضاف على نطاقها الرسمي، ما يجعله تصيّد."
+  },
+  {
+    "id": "17",
+    "title": "Dropbox",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-dropbox.png",
+    "isPhish": false,
+    "explanation": "النطاق صحيح وهو dropbox.com الرسمي، ما يعني أن الصفحة حقيقية."
+  },
+  {
+    "id": "18",
+    "title": "Battle.net",
+    "text": "https://d3j20uveo70stj.cloudfront.net/opendns-www/img/phishing-quiz-img/screen-bnet.png",
+    "isPhish": false,
+    "explanation": "النطاق تابع رسمياً لخدمة Battle.net من Blizzard، وبالتالي ليس موقع تصيّد."
+  }
+
+]

@@ -1,0 +1,365 @@
+[
+  {
+    "id": "1",
+    "sender": "Unknown",
+    "messages": [
+      { "text": "يا محمد، كسبت جايزة من البنك!", "sender": "them", "isPhish": true },
+      { "text": "جد؟ ازاي؟", "sender": "you", "isPhish": false },
+      { "text": "ادخل بياناتك هنا: http://bank-eg.co", "sender": "them", "isPhish": true }
+    ]
+  },
+  {
+    "id": "2",
+    "sender": "Friend",
+    "messages": [
+      { "text": "هي، في حد بعتلي كود واتساب، اعمل ايه؟", "sender": "you", "isPhish": false },
+      { "text": "ابعت الكود بسرعة!", "sender": "them", "isPhish": true }
+    ]
+  },
+  {
+    "id": "3",
+    "sender": "Bank",
+    "messages": [
+      {
+        "text": "البنك الأهلي: لن نطلب منك كلمة السر عبر الرسائل.",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "تمام شكراً على التوضيح", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "4",
+    "sender": "Scammer",
+    "messages": [
+      {
+        "text": "دخل بيانات الفيزا دلوقتي وتاخد 2000 جنيه",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "انا مش واثق، اللينك غريب", "sender": "you", "isPhish": false },
+      { "text": "ما تخافش دا رسمي!", "sender": "them", "isPhish": true }
+    ]
+  },
+  {
+    "id": "5",
+    "sender": "School",
+    "messages": [
+      {
+        "text": "المدرسة: الامتحان هيتأجل للاتنين",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "حلو، شكراً عالإعلام", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "6",
+    "sender": "Telecom",
+    "messages": [
+      {
+        "text": "مبروك! كسبت 1000 دقيقة من اورنج",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "ازاي؟", "sender": "you", "isPhish": false },
+      {
+        "text": "سجل هنا: http://orange-free.com",
+        "sender": "them",
+        "isPhish": true
+      }
+    ]
+  },
+  {
+    "id": "7",
+    "sender": "Mom",
+    "messages": [
+      {
+        "text": "خلي بالك متديش بياناتك لحد",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "تمام يا ماما", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "8",
+    "sender": "Friend",
+    "messages": [
+      {
+        "text": "في لينك جامد، ممكن تربح بلايستيشن!",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "هو رسمي؟", "sender": "you", "isPhish": false },
+      { "text": "ايوة متقلقش، جرب بسرعة", "sender": "them", "isPhish": true }
+    ]
+  },
+  {
+    "id": "9",
+    "sender": "Delivery",
+    "messages": [
+      {
+        "text": "الطلب بتاعك وصل النهاردة الساعة 6",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "تمام شكراً", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "10",
+    "sender": "Scammer",
+    "messages": [
+      {
+        "text": "حسابك في البنك هيتقفل خلال 24 ساعة",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "ازاي يعني؟", "sender": "you", "isPhish": false },
+      {
+        "text": "ادخل اللينك دا وحدث بياناتك",
+        "sender": "them",
+        "isPhish": true
+      }
+    ]
+  },
+  {
+    "id": "11",
+    "sender": "Friend",
+    "messages": [
+      {
+        "text": "في واحد بيقول هيبعتلي فلوس لو بعدتله الكود",
+        "sender": "them",
+        "isPhish": true
+      },
+      {
+        "text": "بتهزر , ابعتلي رقمه عايز اكسب انا كمان !",
+        "sender": "you",
+        "isPhish": true
+      }
+    ]
+  },
+  {
+    "id": "12",
+    "sender": "Teacher",
+    "messages": [
+      {
+        "text": "المحاضرة هتبدأ بدري بكرة",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "تمام حاضر", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "13",
+    "sender": "Scammer",
+    "messages": [
+      {
+        "text": "معانا فرصة استثمار هتكسب منها 300% في يوم",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "الكلام دا مش منطقي", "sender": "you", "isPhish": false },
+      { "text": "صدقني، جرب وهتشوف", "sender": "them", "isPhish": true }
+    ]
+  },
+  {
+    "id": "14",
+    "sender": "Dad",
+    "messages": [
+      {
+        "text": "خلي بالك من أي رسائل تطلب كلمة السر",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "تمام حاضر", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "15",
+    "sender": "Bank",
+    "messages": [
+      {
+        "text": "بنك مصر: لن نطلب أي بيانات شخصية عبر الرسائل",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "مفهوم شكراً", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "16",
+    "sender": "Scammer",
+    "messages": [
+      {
+        "text": "ادخل هنا تكسب موبايل مجاني",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "الرابط شكله غريب", "sender": "you", "isPhish": false },
+      { "text": "لا عادي جرب", "sender": "them", "isPhish": true }
+    ]
+  },
+  {
+    "id": "17",
+    "sender": "Friend",
+    "messages": [
+      {
+        "text": "النتيجة اتبعتتلك؟",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "اكيد ده مش موقع المدرسة ! دي مش نتيجتي !", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "18",
+    "sender": "Unknown",
+    "messages": [
+      { "text": "انت اخترت تكسب 5000 جنيه", "sender": "them", "isPhish": true },
+      { "text": "بس انا مدخلتش مسابقة", "sender": "you", "isPhish": false },
+      { "text": "ادخل اللينك ومتسألش", "sender": "them", "isPhish": true }
+    ]
+  },
+  {
+    "id": "19",
+    "sender": "School",
+    "messages": [
+      { "text": "بكرة اجازة رسمية", "sender": "them", "isPhish": false },
+      { "text": "حلو شكراً", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "20",
+    "sender": "Friend",
+    "messages": [
+      {
+        "text": " انا خسرت حسابي في فيسبوك",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "ازاي حصل؟", "sender": "you", "isPhish": false },
+      { "text": "دخلت على لينك غريب", "sender": "them", "isPhish": false }
+    ]
+  },
+  {
+    "id": "21",
+    "sender": "Scammer",
+    "messages": [
+      {
+        "text": "ابعتلي صورتك بالبطاقة وهنحولك 10000",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "مستحيل اعمل كده", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "22",
+    "sender": "Bank",
+    "messages": [
+      {
+        "text": "تم اضافة مرتبك الى الحساب",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "تمام شكراً", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "23",
+    "sender": "Scammer",
+    "messages": [
+      {
+        "text": "مبروك كسبت عربية! سجل بياناتك دلوقتي",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "العرض دا شكله وهمي", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "24",
+    "sender": "Mom",
+    "messages": [
+      { "text": "وصلك رسالة عن جايزة؟", "sender": "them", "isPhish": false },
+      { "text": "ايوة، مسحتها على طول", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "25",
+    "sender": "Scammer",
+    "messages": [
+      {
+        "text": "كلمة السر بتاعتك اتسرقت، غيرها هنا",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "هغيرها من التطبيق الرسمي", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "26",
+    "sender": "Friend",
+    "messages": [
+      {
+        "text": "بص اللينك دا بيقول هيديك رصيد مجاني",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "لا دا نصب اكيد", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "27",
+    "sender": "Dad",
+    "messages": [
+      {
+        "text": "متصدقش اي رسائل مش من البنك مباشرة",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "تمام حاضر", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "28",
+    "sender": "Scammer",
+    "messages": [
+      {
+        "text": "اضغط هنا علشان تستلم الطرد بتاعك",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "بس انا مستني طرد منين؟", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "29",
+    "sender": "School",
+    "messages": [
+      {
+        "text": "المدرسة: بلاش تشارك بياناتك مع أي لينك خارجي",
+        "sender": "them",
+        "isPhish": false
+      },
+      { "text": "تمام شكراً", "sender": "you", "isPhish": false }
+    ]
+  },
+  {
+    "id": "30",
+    "sender": "Friend",
+    "messages": [
+      {
+        "text": "يا عم كسبت 2000 جنيه في مسابقة!",
+        "sender": "them",
+        "isPhish": true
+      },
+      { "text": "هو فين اللينك؟", "sender": "you", "isPhish": false },
+      { "text": "http://win-fast-eg.com", "sender": "them", "isPhish": true },
+      { "text": "اكيد نصب، مش هدخل", "sender": "you", "isPhish": false }
+    ]
+  }
+]

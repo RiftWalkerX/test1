@@ -1,0 +1,282 @@
+[
+  {
+    "id": "1",
+    "sender": "Unknown",
+    "text": "مبروك! كسبت ٥٠٠٠ جنيه من فودافون. دوس الرابط: http://vodafone-win.com",
+    "isPhish": true,
+    "explanation": "Fake domain and urgent prize claim."
+  },
+  {
+    "id": "2",
+    "sender": "Bank",
+    "text": "البنك الأهلي: لن نطلب رمز التحقق عبر الرسائل.",
+    "isPhish": false,
+    "explanation": "Legitimate security reminder, no links."
+  },
+  {
+    "id": "3",
+    "sender": "Scammer",
+    "text": "اضغط هنا لتحديث بياناتك: http://bank-eg.co",
+    "isPhish": true,
+    "explanation": "Urgent prompt with fake domain."
+  },
+  {
+    "id": "4",
+    "sender": "Vodafone",
+    "text": "رصيدك قرب يخلص، اشحن من تطبيق أنا فودافون.",
+    "isPhish": false,
+    "explanation": "Official reminder with no suspicious link."
+  },
+  {
+    "id": "5",
+    "sender": "Scammer",
+    "text": "مبروك يا فائز! كسبت عربية 2025، ابعت بياناتك كاملة على اللينك: http://win-car-eg.com",
+    "isPhish": true,
+    "explanation": "Too good to be true + fake link."
+  },
+  {
+    "id": "6",
+    "sender": "Etisalat Misr",
+    "text": "اتصالات: استخدم تطبيق My Etisalat للتحكم في استهلاكك.",
+    "isPhish": false,
+    "explanation": "Normal service message, trusted app."
+  },
+  {
+    "id": "7",
+    "sender": "Scammer",
+    "text": "البنك المركزي: حسابك اتوقف. ادخل هنا علشان تفعلّه: http://central-egy-bank.net",
+    "isPhish": true,
+    "explanation": "Fake authority and link."
+  },
+  {
+    "id": "8",
+    "sender": "Friend",
+    "text": "ازيك يا محمد، غيرت رقمي ده الجديد.",
+    "isPhish": false,
+    "explanation": "Personal casual text, no scam attempt."
+  },
+  {
+    "id": "9",
+    "sender": "Scammer",
+    "text": "عايزين ضروري تكتب الباسورد بتاعك دلوقتي عشان التحديث.",
+    "isPhish": true,
+    "explanation": "Asks for password directly."
+  },
+  {
+    "id": "10",
+    "sender": "Orange",
+    "text": "استمتع بباقات الانترنت الجديدة من أورنج عبر التطبيق.",
+    "isPhish": false,
+    "explanation": "Legitimate promo, no shady links."
+  },
+  {
+    "id": "11",
+    "sender": "Scammer",
+    "text": "كسبت ٢٠٠٠ جنيه رصيد هدية. افتح الرابط: http://free-balance-egypt.org",
+    "isPhish": true,
+    "explanation": "Suspicious domain with fake offer."
+  },
+  {
+    "id": "12",
+    "sender": "Family",
+    "text": "ماتنساش تيجي بكرة معانا الفرح الساعة ٨.",
+    "isPhish": false,
+    "explanation": "Normal family reminder."
+  },
+  {
+    "id": "13",
+    "sender": "Scammer",
+    "text": "شركه الكهرباء: لازم تدفع فاتورتك دلوقتي هنا http://pay-electric-eg.com",
+    "isPhish": true,
+    "explanation": "Fake utility message with link."
+  },
+  {
+    "id": "14",
+    "sender": "We",
+    "text": "WE: عرض جديد على باقات النت المنزلي، زور أقرب فرع.",
+    "isPhish": false,
+    "explanation": "Legitimate provider announcement."
+  },
+  {
+    "id": "15",
+    "sender": "Scammer",
+    "text": "بسبب نشاط مشبوه اتقفل حسابك في البريد المصري، فعلّه هنا: http://egy-post-secure.me",
+    "isPhish": true,
+    "explanation": "Fake scare tactic with malicious URL."
+  },
+  {
+    "id": "16",
+    "sender": "Friend",
+    "text": "ابعتلي صورة المحاضرة لو سمحت.",
+    "isPhish": false,
+    "explanation": "Friendly chat, not phishing."
+  },
+  {
+    "id": "17",
+    "sender": "Scammer",
+    "text": "معاك فودافون؟ دوس الرابط وكسب كروت شحن ببلاش: http://vf-gift-eg.com",
+    "isPhish": true,
+    "explanation": "Too good to be true + fake link."
+  },
+  {
+    "id": "18",
+    "sender": "University",
+    "text": "نتيجة الامتحانات ظهرت على موقع الكلية الرسمي.",
+    "isPhish": false,
+    "explanation": "Legit notification from trusted source."
+  },
+  {
+    "id": "19",
+    "sender": "Scammer",
+    "text": "معاك مخالفات مرورية. ادفعها فوراً من هنا: http://traffic-pay-egypt.biz",
+    "isPhish": true,
+    "explanation": "Scam pretending to be authority."
+  },
+  {
+    "id": "20",
+    "sender": "Doctor",
+    "text": "ميعادك مع الدكتور بكره الساعة ٦.",
+    "isPhish": false,
+    "explanation": "Real appointment reminder."
+  },
+  {
+    "id": "21",
+    "sender": "Scammer",
+    "text": "حساب بايبال بتاعك مقفول. سجل دخول هنا: http://paypal-egypt-support.net",
+    "isPhish": true,
+    "explanation": "Impersonating PayPal with fake domain."
+  },
+  {
+    "id": "22",
+    "sender": "School",
+    "text": "ماتنساش تجيب معاك الأدوات بكرة.",
+    "isPhish": false,
+    "explanation": "Casual school reminder."
+  },
+  {
+    "id": "23",
+    "sender": "Scammer",
+    "text": "انت كسبت شقة في التجمع! ادخل دلوقتي: http://win-flat-eg.org",
+    "isPhish": true,
+    "explanation": "Unrealistic prize scam."
+  },
+  {
+    "id": "24",
+    "sender": "Etisalat",
+    "text": "اتصالات: اشحن من التطبيق وخد ضعف الباقة.",
+    "isPhish": false,
+    "explanation": "Valid company offer."
+  },
+  {
+    "id": "25",
+    "sender": "Scammer",
+    "text": "كارت البنك بتاعك هيتقفل النهاردة! اضغط هنا فوراً: http://bank-shut-eg.com",
+    "isPhish": true,
+    "explanation": "Urgency trick + fake link."
+  },
+  {
+    "id": "26",
+    "sender": "Friend",
+    "text": "انت فين؟ بقالي ساعة مستنيك.",
+    "isPhish": false,
+    "explanation": "Personal message."
+  },
+  {
+    "id": "27",
+    "sender": "Scammer",
+    "text": "وزارة الصحة: سجل بياناتك هنا تاخد كشف مجاني: http://health-egy-care.org",
+    "isPhish": true,
+    "explanation": "Fake ministry identity."
+  },
+  {
+    "id": "28",
+    "sender": "Work",
+    "text": "اجتماع بكرة الساعة ١٠ في القاعة.",
+    "isPhish": false,
+    "explanation": "Work-related message."
+  },
+  {
+    "id": "29",
+    "sender": "Scammer",
+    "text": "رسالة من الأمن العام: حسابك تحت المراجعة. دخل بياناتك هنا: http://security-eg-gov.info",
+    "isPhish": true,
+    "explanation": "Fake government impersonation."
+  },
+  {
+    "id": "30",
+    "sender": "Bank Misr",
+    "text": "عميلنا العزيز: لا تشارك كلمة السر أو رمز التحقق مع أي شخص.",
+    "isPhish": false,
+    "explanation": "Legit security advice."
+  },
+  {
+  "id": "31",
+  "sender": "Scammer",
+  "text": "فزت بأحدث آيفون! ادخل على الرابط عشان تستلمه: http://win-iphone-eg.com",
+  "isPhish": true,
+  "explanation": "Prize claim with suspicious domain; typical phishing."
+  },
+  {
+  "id": "32",
+  "sender": "Electricity",
+  "text": "تنبيه: صيانة مجدولة غداً على شبكات المنطقة من الساعة ١٠ صباحاً إلى ٢ ظهراً.",
+  "isPhish": false,
+  "explanation": "Service maintenance notice from utility, no links."
+  },
+  {
+  "id": "33",
+  "sender": "Scammer",
+  "text": "حصلت مخالفة جديدة باسمهك، ادفعها هنا فوراً: http://speeding-pay-eg.net",
+  "isPhish": true,
+  "explanation": "Threat/urgency with fake payment link."
+  },
+  {
+  "id": "34",
+  "sender": "Friend",
+  "text": "الجمعة عملتنا طلعة، تيجي معانا ولا لأ؟",
+  "isPhish": false,
+  "explanation": "Casual invitation between friends."
+  },
+  {
+  "id": "35",
+  "sender": "Scammer",
+  "text": "لو سمحت ابعتلي رمز التحقق اللى وصلك عشان نكمل التحديث.",
+  "isPhish": true,
+  "explanation": "Directly requests OTP — classic phishing/credential theft."
+  },
+  {
+  "id": "36",
+  "sender": "شركة الشحن",
+  "text": "شحنتك وصلت للفرع القريب منك، استلمها خلال ٧ أيام عمل.",
+  "isPhish": false,
+  "explanation": "Typical courier notification without suspicious link."
+  },
+  {
+  "id": "37",
+  "sender": "Scammer",
+  "text": "وزارة التربية والتعليم: طلّع بيانات الطالب من هنا للحصول على المعاش: http://edu-update-egy.com",
+  "isPhish": true,
+  "explanation": "Impersonation of ministry + suspicious domain."
+  },
+  {
+  "id": "38",
+  "sender": "Bank",
+  "text": "تنبيه أمني: لو شفت أي نشاط مش واضح في حسابك اتصل بخدمة العملاء فوراً.",
+  "isPhish": false,
+  "explanation": "Generic security advisory from bank, no links or requests for data."
+  },
+  {
+  "id": "39",
+  "sender": "Scammer",
+  "text": "ساهم بتبرع لمتضرري الفيضان هنا: http://donate-relief-eg.org — ادخل وادفع الآن",
+  "isPhish": true,
+  "explanation": "Fake charity link used to steal payment details."
+  },
+  {
+  "id": "40",
+  "sender": "University",
+  "text": "جدول محاضرات الترم الجديد اتنشر على بوابة الكلية الرسمية.",
+  "isPhish": false,
+  "explanation": "Official academic announcement without suspicious elements."
+  }
+]
