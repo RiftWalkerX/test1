@@ -54,7 +54,6 @@ async function generateLevels() {
         sender: s.sender ?? "جهة مجهولة",
         timestamp: s.timestamp ?? "الآن",
         correctAnswer: s.isPhish ? "phishing" : "safe",
-        difficulty: 1,
         explanation: s.explanation ?? "",
       };
     }
@@ -67,7 +66,6 @@ async function generateLevels() {
           sender: m.sender === "you" ? "user" : m.sender ?? "other",
           isPhishing: !!m.isPhish,
         })),
-        difficulty: 1,
         explanation:
           d.explanation ??
           (d.isPhish ? "المحادثة تحتوي على رسائل احتيالية." : "المحادثة آمنة."),
@@ -80,7 +78,6 @@ async function generateLevels() {
         imageUrl: i.text ?? i.imageUrl ?? "",
         description: i.title ?? i.description ?? "",
         correctAnswer: i.isPhish ? "phishing" : "safe",
-        difficulty: 3,
         explanation: i.explanation ?? "",
       };
     }
@@ -127,8 +124,6 @@ async function generateLevels() {
     }
 
     const allScenarios = [...mappedSms, ...mappedDialogues, ...mappedImages];
-    allScenarios.forEach((s) => (s.difficulty = assignHardness(s)));
-    allScenarios.sort((a, b) => a.difficulty - b.difficulty);
 
     const levels = {};
     for (let i = 1; i <= 20; i++) levels[i] = [];
@@ -170,7 +165,6 @@ async function generateLevels() {
           sender: "جهة مجهولة",
           timestamp: "الآن",
           correctAnswer: "phishing",
-          difficulty: 1,
           explanation: "مثال افتراضي.",
         });
       }
@@ -209,7 +203,6 @@ async function generateLevels() {
           sender: "جهة مجهولة",
           timestamp: "الآن",
           correctAnswer: "phishing",
-          difficulty: 1,
           explanation:
             "الرسائل التي تحتوي على روابط مشبوهة غالباً ما تكون محاولات احتيال.",
         },
@@ -266,7 +259,6 @@ class TrainingLevelInterface {
           sender: "جهة مجهولة",
           timestamp: "الآن",
           correctAnswer: "phishing",
-          difficulty: 1,
           explanation:
             "الرسائل التي تحتوي على روابط مشبوهة غالباً ما تكون محاولات احتيال.",
         },
