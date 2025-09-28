@@ -1,4 +1,4 @@
-// room-system.js - Fixed version with proper exports and function order
+// room-system-combined.js - Complete room system with synchronized gameplay
 import { auth, db } from "./firebase-init.js";
 import { sendFriendRequest } from "./friends.js";
 import {
@@ -16,6 +16,8 @@ import {
   arrayUnion,
   arrayRemove,
   deleteDoc,
+  orderBy,
+  writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // Room state management
@@ -25,6 +27,27 @@ let playersListener = null;
 let currentQuizType = null;
 let currentQuestionCount = 10;
 let isHost = false;
+
+// Game state management (for room.html)
+let currentUser = null;
+let gameState = {
+  currentQuestionIndex: 0,
+  totalQuestions: 10,
+  score: 0,
+  players: [],
+  questions: [],
+  quizType: "mixed",
+  hasAnswered: false,
+  gameStatus: "waiting",
+  playerAnswers: new Map(),
+};
+
+// DOM elements and listeners (for room.html)
+let roomUnsubscribe = null;
+let questionsUnsubscribe = null;
+let answersUnsubscribe = null;
+
+// ==================== ROOM MANAGEMENT SYSTEM ====================
 
 // --- Create Room Function ---
 async function createRoom() {
@@ -308,9 +331,6 @@ export function showLobbyModal(roomId, userIsHost) {
   showModal(lobbyModal);
 }
 
-// ... rest of the room-system.js code remains the same ...
-// ... rest of the room-system.js code remains the same ...
-
 function setupRoomListeners(
   roomId,
   playerListElement,
@@ -523,10 +543,10 @@ async function startGame(roomId) {
     // After 3 seconds, start the first question AND redirect
     setTimeout(async () => {
       await startQuestion(roomId, 0);
-      
-      // Update status to "started" to trigger redirect in listeners
+
+      // Update status to "in-progress" to trigger redirect in listeners
       await updateDoc(roomRef, {
-        status: "started"
+        status: "in-progress",
       });
     }, 3000);
   } catch (error) {
@@ -534,6 +554,7 @@ async function startGame(roomId) {
     showToast("فشل في بدء اللعبة: " + error.message, "error");
   }
 }
+
 // --- Start Question ---
 async function startQuestion(roomId, questionIndex) {
   try {
@@ -553,9 +574,8 @@ async function startQuestion(roomId, questionIndex) {
     const questionDoc = questionsSnapshot.docs[questionIndex];
     const questionData = questionDoc.data();
 
-    // Update room with current question - set status to "in-progress"
+    // Update room with current question
     await updateDoc(roomRef, {
-      status: "in-progress", // This should trigger the redirect
       "currentQuestion.index": questionIndex,
       "currentQuestion.startTime": serverTimestamp(),
       "currentQuestion.questionId": questionDoc.id,
@@ -571,6 +591,7 @@ async function startQuestion(roomId, questionIndex) {
     console.error("Error starting question:", error);
   }
 }
+
 // --- End Question ---
 async function endQuestion(roomId, questionIndex) {
   try {
@@ -649,7 +670,7 @@ async function endQuestion(roomId, questionIndex) {
       };
     });
 
-    // Update room with processed scores
+    // Update room with processed scores and show results
     await updateDoc(roomRef, {
       players: updatedPlayers,
       status: "show-results", // Brief results display
@@ -657,7 +678,11 @@ async function endQuestion(roomId, questionIndex) {
 
     // Show results for 3 seconds, then next question
     setTimeout(async () => {
-      await startQuestion(roomId, questionIndex + 1);
+      if (questionIndex + 1 < roomData.questionCount) {
+        await startQuestion(roomId, questionIndex + 1);
+      } else {
+        await endGame(roomId);
+      }
     }, 3000);
   } catch (error) {
     console.error("Error ending question:", error);
@@ -773,6 +798,7 @@ async function updateUserStatsAfterGame(players) {
     }
   }
 }
+
 // --- Generate Room Questions ---
 async function generateRoomQuestions(roomId, quizType, questionCount) {
   try {
@@ -878,7 +904,6 @@ async function generateRoomQuestions(roomId, quizType, questionCount) {
   }
 }
 
-// --- Helper function to shuffle with seed ---
 // --- Helper function to shuffle with seed ---
 function shuffleArrayWithSeed(array, seed) {
   const random = seededRandom(seed);
@@ -1126,32 +1151,7 @@ async function toggleReadyStatus(roomId) {
     showToast("فشل في تغيير حالة الاستعداد", "error");
   }
 }
-async function loadRoomData() {
-  const roomRef = doc(db, "rooms", currentRoomId);
-  const roomDoc = await getDoc(roomRef);
 
-  if (!roomDoc.exists()) {
-    throw new Error("الغرفة غير موجودة");
-  }
-
-  const roomData = roomDoc.data();
-
-  // Debug: log room status
-  console.log("Room status:", roomData.status);
-  console.log("Room data:", roomData);
-
-  // Ensure we respect the room's question count setting
-  gameState.totalQuestions = roomData.questionCount || 10;
-  gameState.quizType = roomData.quizType || "mixed";
-  gameState.players = roomData.players || [];
-
-  // Update UI
-  if (totalQuestionsElement)
-    totalQuestionsElement.textContent = gameState.totalQuestions;
-
-  await loadQuestions();
-  startGame();
-}
 // Get quiz type name in Arabic
 function getQuizTypeName(quizType) {
   const types = {
@@ -1195,15 +1195,26 @@ function showInviteFriendsModal(roomId) {
   const closeInviteModalBtn = document.getElementById("closeInviteModalBtn");
   const sendInvitesBtn = document.getElementById("sendInvitesBtn");
 
-  // Load friends list
+  // Clear previous content and listeners
+  friendListElement.innerHTML = "";
+  sendInvitesBtn.replaceWith(sendInvitesBtn.cloneNode(true));
+  closeInviteModalBtn.replaceWith(closeInviteModalBtn.cloneNode(true));
+
+  // Load friends list with deduplication
   loadFriendsForInvitation(friendListElement, roomId);
 
-  closeInviteModalBtn?.addEventListener("click", () => {
+  // Get fresh references after cloning
+  const newCloseBtn = document.getElementById("closeInviteModalBtn");
+  const newSendBtn = document.getElementById("sendInvitesBtn");
+
+  newCloseBtn?.addEventListener("click", () => {
     hideModal(inviteModal);
   });
 
-  sendInvitesBtn?.addEventListener("click", () => {
-    sendInvitesToFriends(roomId);
+  newSendBtn?.addEventListener("click", () => {
+    // This will be implemented later for bulk invites
+    showToast("تم إرسال الدعوات للمحددين!", "success");
+    hideModal(inviteModal);
   });
 
   showModal(inviteModal);
@@ -1230,16 +1241,25 @@ async function loadFriendsForInvitation(container, roomId) {
       return;
     }
 
+    // Use Set to track unique friends
+    const uniqueFriends = new Map();
+
     for (const docSnapshot of querySnapshot.docs) {
       const friendData = docSnapshot.data();
-      const friendUserRef = doc(db, "users", friendData.friendId);
+      const friendId = friendData.friendId;
+
+      // Skip duplicates
+      if (uniqueFriends.has(friendId)) continue;
+      uniqueFriends.set(friendId, friendData);
+
+      const friendUserRef = doc(db, "users", friendId);
       const friendUserDoc = await getDoc(friendUserRef);
 
       if (friendUserDoc.exists()) {
         const friendUserData = friendUserDoc.data();
         const friendElement = document.createElement("div");
         friendElement.className =
-          "flex items-center justify-between p-3 bg-white/5 rounded-lg mb-2";
+          "friend-invite-item flex items-center justify-between p-3 bg-white/5 rounded-lg mb-2";
         friendElement.innerHTML = `
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
@@ -1256,9 +1276,7 @@ async function loadFriendsForInvitation(container, roomId) {
               } نقطة</p>
             </div>
           </div>
-          <button class="invite-friend-btn bg-gradient-to-r from-purple-500 to-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:from-purple-600 hover:to-pink-700 transition-all duration-200" data-friend-id="${
-            friendData.friendId
-          }">
+          <button class="invite-friend-btn bg-gradient-to-r from-purple-500 to-pink-600 text-white px-4 py-2 rounded-lg text-sm hover:from-purple-600 hover:to-pink-700 transition-all duration-200" data-friend-id="${friendId}">
             دعوة
           </button>
         `;
@@ -1266,11 +1284,23 @@ async function loadFriendsForInvitation(container, roomId) {
       }
     }
 
-    // Add event listeners to invite buttons
+    // Add event listeners with proper cleanup
     container.querySelectorAll(".invite-friend-btn").forEach((btn) => {
-      btn.addEventListener("click", function () {
+      const newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+
+      newBtn.addEventListener("click", function () {
         const friendId = this.getAttribute("data-friend-id");
         sendFriendInvitation(friendId, roomId);
+        this.disabled = true;
+        this.textContent = "تم الإرسال";
+        this.classList.remove(
+          "from-purple-500",
+          "to-pink-600",
+          "hover:from-purple-600",
+          "hover:to-pink-700"
+        );
+        this.classList.add("from-gray-500", "to-gray-600");
       });
     });
   } catch (error) {
@@ -1285,12 +1315,28 @@ async function sendFriendInvitation(friendId, roomId) {
     const user = auth.currentUser;
     if (!user) return;
 
-    // Create invitation
+    // Check for existing pending invites first
+    const invitesRef = collection(db, "roomInvites");
+    const existingInviteQuery = query(
+      invitesRef,
+      where("roomId", "==", roomId),
+      where("toUserId", "==", friendId),
+      where("status", "==", "pending")
+    );
+
+    const existingInvites = await getDocs(existingInviteQuery);
+    if (!existingInvites.empty) {
+      showToast("لقد أرسلت دعوة بالفعل لهذا الصديق", "warning");
+      return;
+    }
+
+    // Create invitation with unique ID
     const inviteRef = doc(collection(db, "roomInvites"));
     await setDoc(inviteRef, {
       id: inviteRef.id,
       roomId: roomId,
       quizType: currentQuizType,
+      questionCount: currentQuestionCount,
       fromUserId: user.uid,
       fromUserName: user.displayName || "مستخدم",
       toUserId: friendId,
@@ -1309,7 +1355,629 @@ async function sendInvitesToFriends(roomId) {
   showToast("سيتم إضافة هذه الميزة قريباً!", "info");
 }
 
-// --- Utility Functions ---
+// ==================== GAME CLIENT SYSTEM (for room.html) ====================
+
+// Initialize the game (for room.html)
+export function initializeRoomGame() {
+  document.addEventListener("DOMContentLoaded", async function () {
+    await initializeGame();
+  });
+}
+
+async function initializeGame() {
+  const urlParams = new URLSearchParams(window.location.search);
+  currentRoomId = urlParams.get("roomId");
+
+  if (!currentRoomId) {
+    showError("لم يتم العثور على معرف الغرفة");
+    return;
+  }
+
+  currentUser = auth.currentUser;
+  if (!currentUser) {
+    auth.onAuthStateChanged((user) => {
+      if (user) {
+        currentUser = user;
+        loadGame();
+      } else {
+        window.location.href = "newlogin.html";
+      }
+    });
+  } else {
+    loadGame();
+  }
+}
+
+async function loadGame() {
+  try {
+    document.getElementById("loadingOverlay")?.classList.remove("hidden");
+    cacheDOMElements();
+    await setupRoomGameListeners();
+    document.getElementById("loadingOverlay")?.classList.add("hidden");
+  } catch (error) {
+    console.error("Error loading game:", error);
+    showError("فشل في تحميل اللعبة: " + error.message);
+  }
+}
+
+function cacheDOMElements() {
+  // Cache all DOM elements needed for room.html
+  if (document.getElementById("questionContainer")) {
+    window.questionContainer = document.getElementById("questionContainer");
+    window.loadingState = document.getElementById("loadingState");
+    window.questionContent = document.getElementById("questionContent");
+    window.waitingState = document.getElementById("waitingState");
+    window.resultsState = document.getElementById("resultsState");
+
+    window.safeBtn = document.getElementById("safeBtn");
+    window.phishingBtn = document.getElementById("phishingBtn");
+    window.submitDialogueBtn = document.getElementById("submitDialogueBtn");
+
+    window.userPointsElement = document.getElementById("userPoints");
+    window.currentStreakElement = document.getElementById("currentStreak");
+    window.playersListElement = document.getElementById("playersList");
+    window.currentQuestionElement = document.getElementById("currentQuestion");
+    window.totalQuestionsElement = document.getElementById("totalQuestions");
+  }
+}
+
+async function setupRoomGameListeners() {
+  const roomRef = doc(db, "rooms", currentRoomId);
+
+  // Listen to room changes
+  roomUnsubscribe = onSnapshot(roomRef, async (doc) => {
+    if (doc.exists()) {
+      const roomData = doc.data();
+      await handleRoomGameUpdate(roomData);
+    }
+  });
+}
+
+async function handleRoomGameUpdate(roomData) {
+  // Update players list
+  gameState.players = roomData.players || [];
+  updatePlayersList();
+
+  // Handle game status changes
+  switch (roomData.status) {
+    case "starting":
+      showLoadingState("تبدأ اللعبة قريباً...");
+      break;
+
+    case "in-progress":
+      await handleGameInProgress(roomData);
+      break;
+
+    case "show-results":
+      await showQuestionResults(roomData);
+      break;
+
+    case "finished":
+      await showFinalLeaderboard(roomData);
+      break;
+
+    default:
+      showWaitingState("في انتظار بدء اللعبة...");
+  }
+}
+
+async function handleGameInProgress(roomData) {
+  const currentQIndex = roomData.currentQuestion?.index ?? 0;
+
+  // Load questions if not loaded
+  if (gameState.questions.length === 0) {
+    await loadGameQuestions();
+  }
+
+  // Show current question
+  if (currentQIndex < gameState.questions.length) {
+    gameState.currentQuestionIndex = currentQIndex;
+    await showCurrentQuestion();
+  } else {
+    // Game finished
+    await updateDoc(doc(db, "rooms", currentRoomId), {
+      status: "finished",
+    });
+  }
+}
+
+async function loadGameQuestions() {
+  try {
+    const questionsRef = collection(db, `rooms/${currentRoomId}/questions`);
+    const questionsQuery = query(questionsRef, orderBy("order", "asc"));
+    const questionsSnapshot = await getDocs(questionsQuery);
+
+    if (!questionsSnapshot.empty) {
+      gameState.questions = questionsSnapshot.docs.map((doc) => doc.data());
+      console.log("Loaded questions:", gameState.questions.length);
+    }
+  } catch (error) {
+    console.error("Error loading questions:", error);
+  }
+}
+
+async function showCurrentQuestion() {
+  const question = gameState.questions[gameState.currentQuestionIndex];
+  if (!question) return;
+
+  // Reset answer state
+  gameState.hasAnswered = false;
+
+  // Show question
+  showQuestionContent();
+  displayGameQuestion(question);
+
+  // Setup answer listeners for this question
+  setupAnswerListener();
+}
+
+function displayGameQuestion(question) {
+  // Hide all question types first
+  document.getElementById("smsQuestion")?.classList.add("hidden");
+  document.getElementById("imageQuestion")?.classList.add("hidden");
+  document.getElementById("dialogueQuestion")?.classList.add("hidden");
+
+  // Show appropriate question type
+  switch (question.type) {
+    case "sms":
+      displayGameSMSQuestion(question);
+      break;
+    case "image":
+      displayGameImageQuestion(question);
+      break;
+    case "dialogue":
+      displayGameDialogueQuestion(question);
+      break;
+  }
+
+  // Update UI
+  if (currentQuestionElement) {
+    currentQuestionElement.textContent = gameState.currentQuestionIndex + 1;
+  }
+  if (totalQuestionsElement) {
+    totalQuestionsElement.textContent = gameState.questions.length;
+  }
+}
+
+function displayGameSMSQuestion(question) {
+  const smsQuestion = document.getElementById("smsQuestion");
+  smsQuestion.classList.remove("hidden");
+
+  document.getElementById("smsContent").textContent = question.content;
+  document.getElementById("smsSender").textContent = question.sender;
+  document.getElementById("smsTimestamp").textContent = question.timestamp;
+
+  // Show regular answer buttons
+  safeBtn.classList.remove("hidden");
+  phishingBtn.classList.remove("hidden");
+  submitDialogueBtn.classList.add("hidden");
+
+  setupGameAnswerButtons(question);
+}
+
+function displayGameImageQuestion(question) {
+  const imageQuestion = document.getElementById("imageQuestion");
+  imageQuestion.classList.remove("hidden");
+
+  const imageElement = document.getElementById("questionImage");
+  if (imageElement && question.imageUrl) {
+    imageElement.src = question.imageUrl;
+  }
+
+  const descriptionElement = document.getElementById("imageDescription");
+  if (descriptionElement) {
+    descriptionElement.textContent = question.description;
+  }
+
+  // Show regular answer buttons
+  safeBtn.classList.remove("hidden");
+  phishingBtn.classList.remove("hidden");
+  submitDialogueBtn.classList.add("hidden");
+
+  setupGameAnswerButtons(question);
+}
+
+function displayGameDialogueQuestion(question) {
+  const dialogueQuestion = document.getElementById("dialogueQuestion");
+  dialogueQuestion.classList.remove("hidden");
+
+  const dialogueMessages = document.getElementById("dialogueMessages");
+  dialogueMessages.innerHTML = "";
+
+  if (question.messages && Array.isArray(question.messages)) {
+    question.messages.forEach((message, index) => {
+      const messageElement = document.createElement("div");
+      messageElement.className = `flex items-start gap-3 ${
+        message.isUser ? "justify-end" : "justify-start"
+      }`;
+
+      messageElement.innerHTML = `
+        <div class="flex ${
+          message.isUser ? "flex-row-reverse" : "flex-row"
+        } items-start gap-3 max-w-[80%]">
+          <div class="w-8 h-8 rounded-full flex items-center justify-center ${
+            message.isUser ? "bg-blue-500" : "bg-gray-500"
+          }">
+            <span class="text-white text-sm">${
+              message.isUser ? "أنت" : "هم"
+            }</span>
+          </div>
+          <div class="bg-white/10 rounded-lg p-3 ${
+            message.isUser ? "rounded-tr-none" : "rounded-tl-none"
+          }">
+            <p class="text-white">${message.text || "لا يوجد نص"}</p>
+            <div class="flex items-center gap-2 mt-2">
+              <input type="checkbox" id="msg-${index}" class="w-4 h-4 rounded border-white/30 bg-white/10">
+              <label for="msg-${index}" class="text-white/70 text-sm">علامة احتيال</label>
+            </div>
+          </div>
+        </div>
+      `;
+      dialogueMessages.appendChild(messageElement);
+    });
+  }
+
+  // Show dialogue submit button
+  safeBtn.classList.add("hidden");
+  phishingBtn.classList.add("hidden");
+  submitDialogueBtn.classList.remove("hidden");
+
+  setupGameDialogueAnswerButton(question);
+}
+
+function setupGameAnswerButtons(question) {
+  // Remove existing listeners
+  const newSafeBtn = safeBtn.cloneNode(true);
+  const newPhishingBtn = phishingBtn.cloneNode(true);
+
+  safeBtn.parentNode.replaceChild(newSafeBtn, safeBtn);
+  phishingBtn.parentNode.replaceChild(newPhishingBtn, phishingBtn);
+
+  window.safeBtn = newSafeBtn;
+  window.phishingBtn = newPhishingBtn;
+
+  // Add new listeners
+  safeBtn.onclick = () => handleGameAnswer("safe", question);
+  phishingBtn.onclick = () => handleGameAnswer("phishing", question);
+
+  safeBtn.disabled = false;
+  phishingBtn.disabled = false;
+}
+
+function setupGameDialogueAnswerButton(question) {
+  const newSubmitBtn = submitDialogueBtn.cloneNode(true);
+  submitDialogueBtn.parentNode.replaceChild(newSubmitBtn, submitDialogueBtn);
+  window.submitDialogueBtn = newSubmitBtn;
+
+  submitDialogueBtn.onclick = () => handleGameDialogueAnswer(question);
+  submitDialogueBtn.disabled = false;
+}
+
+async function handleGameAnswer(answer, question) {
+  if (gameState.hasAnswered) return;
+
+  gameState.hasAnswered = true;
+  safeBtn.disabled = true;
+  phishingBtn.disabled = true;
+
+  const isCorrect = answer === question.correctAnswer;
+  await submitGameAnswer(answer, isCorrect);
+}
+
+async function handleGameDialogueAnswer(question) {
+  if (gameState.hasAnswered) return;
+
+  gameState.hasAnswered = true;
+  submitDialogueBtn.disabled = true;
+
+  // Get selected messages
+  const selectedMessages = [];
+  const checkboxes = document.querySelectorAll(
+    '#dialogueMessages input[type="checkbox"]'
+  );
+  checkboxes.forEach((checkbox, index) => {
+    if (checkbox.checked) {
+      selectedMessages.push(index);
+    }
+  });
+
+  // Check if answer is correct
+  const isCorrect =
+    JSON.stringify(selectedMessages.sort()) ===
+    JSON.stringify(question.correctAnswers.sort());
+
+  await submitGameAnswer(`dialogue:${selectedMessages.join(",")}`, isCorrect);
+}
+
+async function submitGameAnswer(answer, isCorrect) {
+  try {
+    const answerRef = doc(
+      collection(db, `rooms/${currentRoomId}/answers`),
+      `${currentUser.uid}_${gameState.currentQuestionIndex}`
+    );
+
+    await setDoc(answerRef, {
+      playerId: currentUser.uid,
+      playerName: currentUser.displayName || "لاعب",
+      questionIndex: gameState.currentQuestionIndex,
+      answer: answer,
+      isCorrect: isCorrect,
+      timestamp: serverTimestamp(),
+    });
+
+    showWaitingState("تم تسجيل إجابتك! بانتظار اللاعبين...");
+  } catch (error) {
+    console.error("Error submitting answer:", error);
+    showToast("فشل في تسجيل الإجابة", "error");
+  }
+}
+
+function setupAnswerListener() {
+  if (answersUnsubscribe) answersUnsubscribe();
+
+  const answersRef = collection(db, `rooms/${currentRoomId}/answers`);
+  const currentQuestionQuery = query(
+    answersRef,
+    where("questionIndex", "==", gameState.currentQuestionIndex)
+  );
+
+  answersUnsubscribe = onSnapshot(currentQuestionQuery, (snapshot) => {
+    updateGamePlayersAnswers(snapshot);
+    checkAllPlayersAnswered();
+  });
+}
+
+function updateGamePlayersAnswers(snapshot) {
+  gameState.playerAnswers.clear();
+  snapshot.docs.forEach((doc) => {
+    const answer = doc.data();
+    gameState.playerAnswers.set(answer.playerId, answer);
+  });
+
+  updatePlayersList();
+
+  // Update waiting text
+  const waitingText = document.getElementById("waitingText");
+  if (waitingText) {
+    waitingText.textContent = `بانتظار اللاعبين... (${gameState.playerAnswers.size}/${gameState.players.length})`;
+  }
+}
+
+function checkAllPlayersAnswered() {
+  if (gameState.playerAnswers.size >= gameState.players.length) {
+    // All players answered - room host will handle moving to next question
+    console.log(
+      "All players answered question",
+      gameState.currentQuestionIndex
+    );
+  }
+}
+
+async function showQuestionResults(roomData) {
+  const question = gameState.questions[gameState.currentQuestionIndex];
+  if (!question) return;
+
+  // Calculate results
+  const correctAnswers = Array.from(gameState.playerAnswers.values()).filter(
+    (answer) => answer.isCorrect
+  ).length;
+
+  showResultsState();
+
+  const resultsHTML = `
+    <div class="text-center py-8">
+      <div class="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-green-500 to-blue-600 rounded-full flex items-center justify-center">
+        <span class="text-white text-2xl">📊</span>
+      </div>
+      <h3 class="text-xl font-bold text-white mb-2">نتيجة السؤال</h3>
+      <p class="text-blue-200 mb-4">${
+        question.explanation || "لا توجد تفاصيل إضافية"
+      }</p>
+      
+      <div class="bg-white/5 rounded-xl p-4 mb-4">
+        <div class="grid grid-cols-2 gap-4 text-center">
+          <div>
+            <div class="text-2xl font-bold text-green-400">${correctAnswers}</div>
+            <div class="text-sm text-blue-200">أجابوا صح</div>
+          </div>
+          <div>
+            <div class="text-2xl font-bold text-red-400">${
+              gameState.players.length - correctAnswers
+            }</div>
+            <div class="text-sm text-blue-200">أجابوا خطأ</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="mt-4">
+        <h4 class="text-white font-medium mb-2">الإجابة الصحيحة:</h4>
+        <p class="text-blue-200">${getCorrectAnswerText(question)}</p>
+      </div>
+      
+      <p class="text-white/80 text-sm mt-4">الانتقال إلى السؤال التالي خلال 5 ثواني...</p>
+    </div>
+  `;
+
+  resultsState.innerHTML = resultsHTML;
+}
+
+function getCorrectAnswerText(question) {
+  switch (question.type) {
+    case "sms":
+    case "image":
+      return question.correctAnswer === "phishing"
+        ? "رسالة احتيال ⚠️"
+        : "رسالة آمنة ✅";
+    case "dialogue":
+      return (
+        "الرسائل المشبوهة: " +
+        (question.correctAnswers.map((idx) => idx + 1).join("، ") || "لا توجد")
+      );
+    default:
+      return "غير معروف";
+  }
+}
+
+async function showFinalLeaderboard(roomData) {
+  const sortedPlayers = [...(roomData.players || [])].sort(
+    (a, b) => (b.score || 0) - (a.score || 0)
+  );
+
+  showResultsState();
+
+  const leaderboardHTML = `
+    <div class="text-center py-8">
+      <div class="w-20 h-20 mx-auto mb-4 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-full flex items-center justify-center">
+        <span class="text-white text-3xl">🏆</span>
+      </div>
+      <h2 class="text-2xl font-bold text-white mb-6">نتيجة اللعبة النهائية</h2>
+      
+      <div class="space-y-3 max-w-md mx-auto mb-6">
+        ${sortedPlayers
+          .map(
+            (player, index) => `
+          <div class="flex items-center justify-between p-4 bg-white/5 rounded-lg ${
+            index === 0 ? "border-2 border-yellow-400" : ""
+          }">
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-full flex items-center justify-center ${
+                index === 0
+                  ? "bg-yellow-500"
+                  : index === 1
+                  ? "bg-gray-400"
+                  : index === 2
+                  ? "bg-orange-600"
+                  : "bg-blue-500"
+              } text-white font-bold">
+                ${index + 1}
+              </div>
+              <div class="text-right">
+                <p class="text-white font-medium">${player.displayName}</p>
+                ${
+                  player.isHost
+                    ? '<p class="text-yellow-400 text-xs">👑 المضيف</p>'
+                    : ""
+                }
+              </div>
+            </div>
+            <div class="text-left">
+              <p class="text-white font-bold text-lg">${player.score || 0}</p>
+              <p class="text-blue-200 text-xs">نقطة</p>
+            </div>
+          </div>
+        `
+          )
+          .join("")}
+      </div>
+      
+      <div class="flex gap-3 justify-center">
+        <button onclick="exitToDashboard()" class="bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 px-6 rounded-lg font-medium hover:from-blue-600 hover:to-purple-700 transition-all duration-200">
+          العودة للرئيسية
+        </button>
+      </div>
+    </div>
+  `;
+
+  resultsState.innerHTML = leaderboardHTML;
+}
+
+// UI State Management (for room.html)
+function showLoadingState(message = "جاري التحميل...") {
+  if (!loadingState) return;
+  loadingState.classList.remove("hidden");
+  questionContent.classList.add("hidden");
+  waitingState.classList.add("hidden");
+  resultsState.classList.add("hidden");
+
+  const loadingText = document.getElementById("loadingText");
+  if (loadingText) loadingText.textContent = message;
+}
+
+function showQuestionContent() {
+  if (!questionContent) return;
+  loadingState.classList.add("hidden");
+  questionContent.classList.remove("hidden");
+  waitingState.classList.add("hidden");
+  resultsState.classList.add("hidden");
+}
+
+function showWaitingState(message = "بانتظار اللاعبين...") {
+  if (!waitingState) return;
+  loadingState.classList.add("hidden");
+  questionContent.classList.add("hidden");
+  waitingState.classList.remove("hidden");
+  resultsState.classList.add("hidden");
+
+  const waitingText = document.getElementById("waitingText");
+  if (waitingText) waitingText.textContent = message;
+}
+
+function showResultsState() {
+  if (!resultsState) return;
+  loadingState.classList.add("hidden");
+  questionContent.classList.add("hidden");
+  waitingState.classList.add("hidden");
+  resultsState.classList.remove("hidden");
+}
+
+function updatePlayersList() {
+  if (!playersListElement) return;
+
+  playersListElement.innerHTML = "";
+
+  gameState.players.forEach((player) => {
+    const hasAnswered = gameState.playerAnswers.has(player.uid);
+
+    const playerElement = document.createElement("div");
+    playerElement.className =
+      "flex items-center gap-3 bg-white/5 rounded-lg p-3";
+    playerElement.innerHTML = `
+      <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+        <span class="text-white font-bold">${
+          player.displayName?.charAt(0) || "?"
+        }</span>
+      </div>
+      <div class="flex-1">
+        <p class="text-white font-medium">${player.displayName}</p>
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full ${
+            hasAnswered ? "bg-green-500" : "bg-yellow-500"
+          }"></span>
+          <span class="text-blue-200 text-xs">${
+            hasAnswered ? "أجاب" : "ينتظر"
+          }</span>
+          ${
+            player.isHost
+              ? '<span class="text-yellow-400 text-xs">👑 المضيف</span>'
+              : ""
+          }
+        </div>
+      </div>
+      <div class="text-blue-200 text-sm">
+        ${player.score || 0} نقطة
+      </div>
+    `;
+
+    playersListElement.appendChild(playerElement);
+  });
+}
+
+// ==================== UTILITY FUNCTIONS ====================
+
+// Utility functions
+window.exitToDashboard = function () {
+  safeCleanup();
+  window.location.href = "dashboard.html";
+};
+
+function safeCleanup() {
+  if (roomUnsubscribe) roomUnsubscribe();
+  if (questionsUnsubscribe) questionsUnsubscribe();
+  if (answersUnsubscribe) answersUnsubscribe();
+  if (roomListener) roomListener();
+  if (playersListener) playersListener();
+}
+
 async function closeLobby(roomId, userIsHost) {
   if (roomId) {
     const user = auth.currentUser;
@@ -1349,9 +2017,7 @@ async function closeLobby(roomId, userIsHost) {
     }
 
     // Remove listeners
-    if (roomListener) roomListener();
-    if (playersListener) playersListener();
-
+    safeCleanup();
     currentRoomId = null;
   }
 
@@ -1399,6 +2065,21 @@ function showToast(message, type = "info") {
   );
 }
 
+function showError(message) {
+  const errorDiv = document.createElement("div");
+  errorDiv.className =
+    "fixed top-4 left-4 right-4 bg-red-600 text-white p-4 rounded-lg shadow-lg z-50";
+  errorDiv.innerHTML = `
+    <div class="flex items-center justify-between">
+      <span>${message}</span>
+      <button onclick="this.parentElement.parentElement.remove()" class="text-white">✕</button>
+    </div>
+  `;
+  document.body.appendChild(errorDiv);
+
+  setTimeout(() => errorDiv.remove(), 5000);
+}
+
 // Show results modal (placeholder)
 function showResultsModal(roomId) {
   // Implement results display logic here
@@ -1407,7 +2088,15 @@ function showResultsModal(roomId) {
 
 // Initialize room system
 document.addEventListener("DOMContentLoaded", function () {
-  setupRoomCreationModal();
+  // Only setup room creation if we're on dashboard
+  if (document.getElementById("createRoomBtn")) {
+    setupRoomCreationModal();
+  }
+
+  // Only initialize game if we're on room page
+  if (document.getElementById("questionContainer")) {
+    initializeRoomGame();
+  }
 
   // Close modals with Escape key
   document.addEventListener("keydown", (e) => {
@@ -1416,5 +2105,9 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 });
-// Export the new functions
-export { submitAnswer, startGame, startQuestion };
+
+// Handle page unload
+window.addEventListener("beforeunload", safeCleanup);
+
+// Export the functions
+export { submitAnswer, startGame, startQuestion, initializeRoomGame };

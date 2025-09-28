@@ -159,74 +159,45 @@ export const loadRoomInvites = async function () {
   );
 
   const querySnapshot = await getDocs(q);
-  const notificationContainer = document.getElementById(
-    "room-invite-notification"
-  );
+  const notificationContainer = document.getElementById("room-invite-notification");
   const invitesList = document.getElementById("roomInvitesList");
-  if (!notificationContainer) return;
+  
+  if (!notificationContainer || !invitesList) return;
+
+  // Clear previous content
+  invitesList.innerHTML = "";
 
   if (querySnapshot.empty) {
     notificationContainer.classList.add("hidden");
     document.getElementById("roomInviteCount")?.classList.add("hidden");
     return;
   }
-  invitesList.innerHTML = "";
+
+  // Use Set to track unique invites
+  const uniqueInvites = new Map();
 
   for (const docSnapshot of querySnapshot.docs) {
     const invite = docSnapshot.data();
+    const inviteKey = `${invite.roomId}-${invite.fromUserId}`;
+    
+    // Skip duplicates
+    if (uniqueInvites.has(inviteKey)) {
+      // Remove duplicate invite
+      await deleteDoc(docSnapshot.ref);
+      continue;
+    }
+    
+    uniqueInvites.set(inviteKey, { invite, docId: docSnapshot.id });
+  }
+
+  // Process unique invites
+  for (const [key, { invite, docId }] of uniqueInvites) {
     const fromUserRef = doc(db, "users", invite.fromUserId);
     const fromUserDoc = await getDoc(fromUserRef);
+    
     if (fromUserDoc.exists()) {
       const fromUserData = fromUserDoc.data();
-
-      const inviteElement = document.createElement("div");
-      inviteElement.className =
-        "group relative overflow-hidden bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-sm border border-white/20 rounded-2xl p-5 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300";
-      inviteElement.innerHTML = `
-        <div class="absolute inset-0 bg-gradient-to-r from-purple-600/10 to-pink-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-        <div class="relative">
-          <div class="flex items-start justify-between mb-4">
-            <div class="flex items-center gap-3">
-              <div class="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
-                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
-                </svg>
-              </div>
-              <div>
-                <h5 class="text-lg font-semibold text-white">${
-                  invite.quizType || "تدريب جماعي"
-                }</h5>
-                <p class="text-purple-200 text-sm">دعوة من ${
-                  fromUserData.displayName || "مستخدم"
-                }</p>
-              </div>
-            </div>
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-200 border border-purple-500/30">
-              ${new Date(
-                invite.createdAt?.toDate?.() || invite.createdAt
-              ).toLocaleDateString("ar-SA")}
-            </span>
-          </div>
-          <div class="flex items-center gap-2">
-            <button onclick="acceptRoomInvite('${docSnapshot.id}', '${
-        invite.roomId
-      }')" class="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium py-2 px-4 rounded-xl transition-all duration-200 transform hover:scale-105 active:scale-95">
-              <div class="flex items-center justify-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                انضم الآن
-              </div>
-            </button>
-            <button onclick="declineRoomInvite('${
-              docSnapshot.id
-            }')" class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-all duration-200 border border-white/20 hover:border-white/30">
-              <div class="flex items-center justify-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                رفض
-              </div>
-            </button>
-          </div>
-        </div>
-      `;
+      const inviteElement = createInviteElement(invite, fromUserData, docId);
       invitesList.appendChild(inviteElement);
     }
   }
@@ -234,6 +205,59 @@ export const loadRoomInvites = async function () {
   notificationContainer.classList.remove("hidden");
 };
 
+function createInviteElement(invite, fromUserData, docId) {
+  const inviteElement = document.createElement("div");
+  inviteElement.className = "group relative overflow-hidden bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-sm border border-white/20 rounded-2xl p-5 hover:shadow-2xl hover:scale-[1.02] transition-all duration-300";
+  
+  inviteElement.innerHTML = `
+    <div class="absolute inset-0 bg-gradient-to-r from-purple-600/10 to-pink-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+    <div class="relative">
+      <div class="flex items-start justify-between mb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+            </svg>
+          </div>
+          <div>
+            <h5 class="text-lg font-semibold text-white">${getQuizTypeName(invite.quizType)}</h5>
+            <p class="text-purple-200 text-sm">دعوة من ${fromUserData.displayName || "مستخدم"}</p>
+            <p class="text-purple-200 text-xs">${invite.questionCount || 10} أسئلة</p>
+          </div>
+        </div>
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-200 border border-purple-500/30">
+          ${new Date(invite.createdAt?.toDate?.() || invite.createdAt).toLocaleDateString("ar-SA")}
+        </span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="acceptRoomInvite('${docId}', '${invite.roomId}')" class="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium py-2 px-4 rounded-xl transition-all duration-200 transform hover:scale-105 active:scale-95">
+          <div class="flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            انضم الآن
+          </div>
+        </button>
+        <button onclick="declineRoomInvite('${docId}')" class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-medium rounded-xl transition-all duration-200 border border-white/20 hover:border-white/30">
+          <div class="flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            رفض
+          </div>
+        </button>
+      </div>
+    </div>
+  `;
+  
+  return inviteElement;
+}
+
+function getQuizTypeName(quizType) {
+  const types = {
+    sms: "رسائل SMS",
+    dialogue: "حوارات",
+    image: "صور مشبوهة",
+    mixed: "كوكتيل أسئلة",
+  };
+  return types[quizType] || "تدريب جماعي";
+}
 // --- HANDLE ROOM INVITE ACTIONS ---
 window.acceptRoomInvite = async function (inviteId, roomId) {
   try {
