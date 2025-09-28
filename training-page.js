@@ -391,7 +391,6 @@ class TrainingLevelInterface {
     }
 
     const q = this.questions[this.currentQuestion];
-    this.updateDifficultyIndicator(q.difficulty);
 
     if (q.type === "sms" && smsPane) {
       smsPane.classList.remove("hidden");
@@ -602,24 +601,7 @@ class TrainingLevelInterface {
       progressText.textContent = `${this.currentQuestion} من ${this.totalQuestions}`;
   }
 
-  updateDifficultyIndicator(difficulty) {
-    const stars = document.querySelectorAll("#difficultyStars svg");
-    const labels = ["سهل", "متوسط", "صعب", "خبير", "متقدم"];
-    stars.forEach((star, index) => {
-      if (index < difficulty) {
-        star.classList.remove("text-white/30");
-        star.classList.add("text-yellow-400");
-      } else {
-        star.classList.remove("text-yellow-400");
-        star.classList.add("text-white/30");
-      }
-    });
-    const difficultyLabel = document
-      .querySelector("#difficultyStars")
-      ?.parentElement?.querySelector(".text-blue-200");
-    if (difficultyLabel)
-      difficultyLabel.textContent = labels[difficulty - 1] || "متوسط";
-  }
+
 
   async completeLevel() {
     const successRate = this.correctAnswers / Math.max(1, this.totalQuestions);
