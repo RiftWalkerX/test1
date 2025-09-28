@@ -151,10 +151,10 @@ async function joinRoom() {
     }
 
     // Enhanced duplicate check with deduplication
-    const uniquePlayers = roomData.players.filter((p, index, self) => 
-      index === self.findIndex((t) => t.uid === p.uid)
+    const uniquePlayers = roomData.players.filter(
+      (p, index, self) => index === self.findIndex((t) => t.uid === p.uid)
     );
-    
+
     const existingPlayer = uniquePlayers.find((p) => p.uid === user.uid);
     if (existingPlayer) {
       showToast("أنت بالفعل في هذه الغرفة", "info");
@@ -178,7 +178,7 @@ async function joinRoom() {
 
     // Add user to room players array (ensure uniqueness)
     const updatedPlayers = [...uniquePlayers, playerData];
-    
+
     await updateDoc(roomRef, {
       players: updatedPlayers,
     });
@@ -385,7 +385,7 @@ function setupRoomListeners(
       }
 
       // Handle room status changes - redirect players when game starts
-      if (roomData.status === "started") {
+      if (roomData.status === "started" || roomData.status === "in-progress") {
         if (userIsHost) {
           // Host gets redirected immediately
           setTimeout(() => {
@@ -500,7 +500,7 @@ async function startGame(roomId) {
       roomData.questionCount
     );
 
-    // Initialize game state
+    // Initialize game state - set status to "starting"
     await updateDoc(roomRef, {
       status: "starting",
       "gameStats.totalQuestions": roomData.questionCount,
@@ -520,9 +520,14 @@ async function startGame(roomId) {
 
     showToast("تبدأ اللعبة خلال 3 ثواني!", "success");
 
-    // After 3 seconds, start the first question
+    // After 3 seconds, start the first question AND redirect
     setTimeout(async () => {
       await startQuestion(roomId, 0);
+      
+      // Update status to "started" to trigger redirect in listeners
+      await updateDoc(roomRef, {
+        status: "started"
+      });
     }, 3000);
   } catch (error) {
     console.error("Error starting game:", error);
@@ -548,9 +553,9 @@ async function startQuestion(roomId, questionIndex) {
     const questionDoc = questionsSnapshot.docs[questionIndex];
     const questionData = questionDoc.data();
 
-    // Update room with current question
+    // Update room with current question - set status to "in-progress"
     await updateDoc(roomRef, {
-      status: "in-progress",
+      status: "in-progress", // This should trigger the redirect
       "currentQuestion.index": questionIndex,
       "currentQuestion.startTime": serverTimestamp(),
       "currentQuestion.questionId": questionDoc.id,
@@ -566,7 +571,6 @@ async function startQuestion(roomId, questionIndex) {
     console.error("Error starting question:", error);
   }
 }
-
 // --- End Question ---
 async function endQuestion(roomId, questionIndex) {
   try {
@@ -808,19 +812,62 @@ async function generateRoomQuestions(roomId, quizType, questionCount) {
         break;
     }
 
+    // Filter out invalid questions (those with undefined required fields)
+    questions = questions.filter((question) => {
+      if (question.type === "image") {
+        return question.imageUrl && question.imageUrl !== undefined;
+      }
+      if (question.type === "sms") {
+        return question.content && question.content !== undefined;
+      }
+      if (question.type === "dialogue") {
+        return (
+          question.messages &&
+          Array.isArray(question.messages) &&
+          question.messages.length > 0
+        );
+      }
+      return true;
+    });
+
     // Shuffle questions using room-specific seed for consistency
     questions = shuffleArrayWithSeed(questions, seed);
 
     // Take the required number of questions
     questions = questions.slice(0, questionCount);
 
+    // If we don't have enough questions after filtering, use sample questions
+    if (questions.length < questionCount) {
+      console.warn(
+        `Only ${questions.length} valid questions found, using sample questions as fallback`
+      );
+      const sampleQuestions = await generateSampleQuestionsArray(
+        questionCount - questions.length
+      );
+      questions = [...questions, ...sampleQuestions];
+    }
+
     // Add questions to Firestore
     for (let i = 0; i < questions.length; i++) {
-      await addDoc(questionsRef, {
+      const questionData = {
         ...questions[i],
         order: i,
         createdAt: serverTimestamp(),
-      });
+      };
+
+      // Ensure all required fields have valid values
+      if (questionData.type === "image" && !questionData.imageUrl) {
+        questionData.imageUrl =
+          "https://via.placeholder.com/300x200/4F46E5/FFFFFF?text=صورة+تدريبية";
+      }
+      if (!questionData.explanation) {
+        questionData.explanation = "لا توجد تفاصيل إضافية";
+      }
+      if (!questionData.difficulty) {
+        questionData.difficulty = 2;
+      }
+
+      await addDoc(questionsRef, questionData);
     }
 
     console.log(`Generated ${questions.length} questions for room ${roomId}`);
@@ -832,19 +879,31 @@ async function generateRoomQuestions(roomId, quizType, questionCount) {
 }
 
 // --- Helper function to shuffle with seed ---
+// --- Helper function to shuffle with seed ---
 function shuffleArrayWithSeed(array, seed) {
   const random = seededRandom(seed);
-  for (let i = array.length - 1; i > 0; i--) {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
   }
-  return array;
+  return newArray;
 }
 
 // --- Seeded random number generator ---
 function seededRandom(seed) {
-  let x = Math.sin(seed.hashCode()) * 10000;
-  return x - Math.floor(x);
+  // Simple seeded random generator
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    const char = seed.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+
+  return function () {
+    hash = Math.sin(hash) * 10000;
+    return hash - Math.floor(hash);
+  };
 }
 
 // Add hashCode function to String prototype for seed generation
@@ -910,15 +969,20 @@ async function loadImageQuestions(timestamp) {
     );
     if (!response.ok) throw new Error("Failed to fetch image questions");
     const data = await response.json();
-    return data.map((image, index) => ({
-      id: `image-${index}`,
-      type: "image",
-      imageUrl: image.url,
-      description: image.description || "",
-      correctAnswer: image.isPhish ? "phishing" : "safe",
-      difficulty: image.difficulty || 2,
-      explanation: image.explanation || "لا توجد تفاصيل إضافية",
-    }));
+
+    return data
+      .map((image, index) => ({
+        id: `image-${index}`,
+        type: "image",
+        imageUrl:
+          image.url ||
+          "https://via.placeholder.com/300x200/4F46E5/FFFFFF?text=صورة+تدريبية",
+        description: image.description || "",
+        correctAnswer: image.isPhish ? "phishing" : "safe",
+        difficulty: image.difficulty || 2,
+        explanation: image.explanation || "لا توجد تفاصيل إضافية",
+      }))
+      .filter((image) => image.imageUrl); // Filter out any remaining undefined URLs
   } catch (error) {
     console.error("Error loading image questions:", error);
     return [];
@@ -970,6 +1034,62 @@ async function generateSampleQuestions(roomId, questionCount) {
   }
 }
 
+// --- Helper function to generate sample questions array ---
+async function generateSampleQuestionsArray(count) {
+  const sampleQuestions = [
+    {
+      type: "sms",
+      content:
+        "عزيزي العميل، لديك رصيد مجاني 10 دينار. لاستلامه اضغط على الرابط: bit.ly/free-balance",
+      sender: "اتصالات",
+      timestamp: "الآن",
+      correctAnswer: "phishing",
+      difficulty: 2,
+      explanation: "هذه رسالة تصيد تحتوي على رابط مختصر مشبوه",
+    },
+    {
+      type: "sms",
+      content:
+        "إشعار من البنك: تمت عملية سحب بمبلغ 500 دينار. إذا لم تكن أنت، اتصل بنا فوراً على 198",
+      sender: "البنك الأهلي",
+      timestamp: "2 دقيقة",
+      correctAnswer: "safe",
+      difficulty: 1,
+      explanation: "هذه رسالة أمنة من البنك تحتوي على رقم خدمة عملاء معروف",
+    },
+    {
+      type: "sms",
+      content:
+        "مبروك! فزت بجائزة 10000 دينار. اضغط هنا لاستلام جائزتك: winprize.com",
+      sender: "مسابقة",
+      timestamp: "5 دقائق",
+      correctAnswer: "phishing",
+      difficulty: 1,
+      explanation: "عروض الجوائز الفورية غالباً ما تكون محاولات احتيال",
+    },
+    {
+      type: "image",
+      imageUrl:
+        "https://via.placeholder.com/300x200/EF4444/FFFFFF?text=رسالة+تصيد",
+      description: "صورة لرسالة بريد إلكتروني تطلب معلومات شخصية",
+      correctAnswer: "phishing",
+      difficulty: 2,
+      explanation: "هذه صورة لرسالة تصيد تحاول الحصول على معلوماتك الشخصية",
+    },
+    {
+      type: "image",
+      imageUrl:
+        "https://via.placeholder.com/300x200/10B981/FFFFFF?text=رسالة+آمنة",
+      description: "صورة لإشعار أمن من البنك",
+      correctAnswer: "safe",
+      difficulty: 1,
+      explanation: "هذه صورة لإشعار أمن من مؤسسة موثوقة",
+    },
+  ];
+
+  return sampleQuestions.slice(0, count);
+}
+
 // Toggle ready status for players - FIXED VERSION
 async function toggleReadyStatus(roomId) {
   const user = auth.currentUser;
@@ -1006,7 +1126,32 @@ async function toggleReadyStatus(roomId) {
     showToast("فشل في تغيير حالة الاستعداد", "error");
   }
 }
+async function loadRoomData() {
+  const roomRef = doc(db, "rooms", currentRoomId);
+  const roomDoc = await getDoc(roomRef);
 
+  if (!roomDoc.exists()) {
+    throw new Error("الغرفة غير موجودة");
+  }
+
+  const roomData = roomDoc.data();
+
+  // Debug: log room status
+  console.log("Room status:", roomData.status);
+  console.log("Room data:", roomData);
+
+  // Ensure we respect the room's question count setting
+  gameState.totalQuestions = roomData.questionCount || 10;
+  gameState.quizType = roomData.quizType || "mixed";
+  gameState.players = roomData.players || [];
+
+  // Update UI
+  if (totalQuestionsElement)
+    totalQuestionsElement.textContent = gameState.totalQuestions;
+
+  await loadQuestions();
+  startGame();
+}
 // Get quiz type name in Arabic
 function getQuizTypeName(quizType) {
   const types = {
