@@ -219,9 +219,7 @@ async function generateQuestions(quizType, count) {
 
     if (quizType === "sms" || quizType === "mixed") {
       fetchPromises.push(
-        fetchWithTimeout(
-          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${timestamp}`
-        )
+        fetchWithTimeout(`./sms-quiz.json?v=${timestamp}`)
           .then((data) =>
             data.map((sms, index) => ({
               id: `sms-${timestamp}-${index}`,
@@ -243,9 +241,7 @@ async function generateQuestions(quizType, count) {
 
     if (quizType === "image" || quizType === "mixed") {
       fetchPromises.push(
-        fetchWithTimeout(
-          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${timestamp}`
-        )
+        fetchWithTimeout(`./image.json?v=${timestamp}`)
           .then((data) =>
             data.map((image, index) => ({
               id: `image-${timestamp}-${index}`,
@@ -266,9 +262,7 @@ async function generateQuestions(quizType, count) {
 
     if (quizType === "mixed") {
       fetchPromises.push(
-        fetchWithTimeout(
-          `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${timestamp}`
-        )
+        fetchWithTimeout(`./dialogues.json?v=${timestamp}`)
           .then((data) =>
             data.map((dialogue, index) => ({
               id: `dialogue-${timestamp}-${index}`,

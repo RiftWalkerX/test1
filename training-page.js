@@ -33,15 +33,9 @@ async function generateLevels() {
   try {
     const now = Date.now();
     const [smsRes, dialogueRes, imageRes] = await Promise.all([
-      fetch(
-        `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${now}`
-      ),
-      fetch(
-        `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${now}`
-      ),
-      fetch(
-        `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${now}`
-      ),
+      fetch(`./sms-quiz.json?v=${now}`),
+      fetch(`./dialogues.json?v=${now}`),
+      fetch(`./image.json?v=${now}`),
     ]);
 
     if (!smsRes.ok || !dialogueRes.ok || !imageRes.ok) {
@@ -600,8 +594,6 @@ class TrainingLevelInterface {
     if (progressText)
       progressText.textContent = `${this.currentQuestion} من ${this.totalQuestions}`;
   }
-
-
 
   async completeLevel() {
     const successRate = this.correctAnswers / Math.max(1, this.totalQuestions);

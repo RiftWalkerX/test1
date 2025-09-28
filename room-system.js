@@ -945,9 +945,7 @@ String.prototype.hashCode = function () {
 // --- Load questions from external sources ---
 async function loadSMSQuestions(timestamp) {
   try {
-    const response = await fetch(
-      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/sms-quiz.json?v=${timestamp}`
-    );
+    const response = await fetch(`./sms-quiz.json?v=${timestamp}`);
     if (!response.ok) throw new Error("Failed to fetch SMS questions");
     const data = await response.json();
     return data.map((sms, index) => ({
@@ -968,9 +966,7 @@ async function loadSMSQuestions(timestamp) {
 
 async function loadDialogueQuestions(timestamp) {
   try {
-    const response = await fetch(
-      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/dialogues.json?v=${timestamp}`
-    );
+    const response = await fetch(`./dialogues.json?v=${timestamp}`);
     if (!response.ok) throw new Error("Failed to fetch dialogue questions");
     const data = await response.json();
     return data.map((dialogue, index) => ({
@@ -989,9 +985,7 @@ async function loadDialogueQuestions(timestamp) {
 
 async function loadImageQuestions(timestamp) {
   try {
-    const response = await fetch(
-      `https://raw.githubusercontent.com/ShadowKnightX/assets-for-zerofake/main/image.json?v=${timestamp}`
-    );
+    const response = await fetch(`./image.json?v=${timestamp}`);
     if (!response.ok) throw new Error("Failed to fetch image questions");
     const data = await response.json();
 
