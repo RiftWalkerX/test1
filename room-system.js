@@ -56,6 +56,10 @@ async function createRoom() {
       questionCount: questionCount,
       maxPlayers: maxPlayers,
       status: "waiting",
+      settings: {
+        questionTime: 10, // 10 seconds per question
+        showLeaderboard: true,
+      },
       players: [
         {
           uid: user.uid,
@@ -63,15 +67,26 @@ async function createRoom() {
           isHost: true,
           isReady: true,
           score: 0,
-          // Remove serverTimestamp() from array - use regular timestamp
+          streak: 0,
+          answers: [],
+          lastAnswer: null,
           joinedAt: new Date().toISOString(),
         },
       ],
-      currentQuestion: 0,
-      scores: {},
+      currentQuestion: {
+        index: 0,
+        startTime: null,
+        questionId: null,
+        answers: [],
+      },
+      gameStats: {
+        totalQuestions: 0,
+        currentQuestionIndex: 0,
+        startTime: null,
+        endTime: null,
+      },
       createdAt: serverTimestamp(),
     });
-
     currentRoomId = roomRef.id;
 
     // Add host as first player in subcollection (this can use serverTimestamp)
@@ -97,7 +112,7 @@ async function createRoom() {
   }
 }
 
-// --- Join Room Function ---
+// --- Join Room Function - FIXED VERSION ---
 async function joinRoom() {
   const user = auth.currentUser;
   if (!user) {
@@ -135,8 +150,12 @@ async function joinRoom() {
       return;
     }
 
-    // Check if user is already in the room
-    const existingPlayer = roomData.players.find((p) => p.uid === user.uid);
+    // Enhanced duplicate check with deduplication
+    const uniquePlayers = roomData.players.filter((p, index, self) => 
+      index === self.findIndex((t) => t.uid === p.uid)
+    );
+    
+    const existingPlayer = uniquePlayers.find((p) => p.uid === user.uid);
     if (existingPlayer) {
       showToast("أنت بالفعل في هذه الغرفة", "info");
       hideModal(document.getElementById("joinRoomModal"));
@@ -144,28 +163,36 @@ async function joinRoom() {
       return;
     }
 
-    // Create player data WITHOUT serverTimestamp for array
+    // Create player data
     const playerData = {
       uid: user.uid,
       displayName: user.displayName || "لاعب",
       isHost: false,
       isReady: false,
       score: 0,
-      joinedAt: new Date().toISOString(), // Use regular timestamp for array
+      streak: 0,
+      answers: [],
+      lastAnswer: null,
+      joinedAt: new Date().toISOString(),
     };
 
-    // Add user to room players array
+    // Add user to room players array (ensure uniqueness)
+    const updatedPlayers = [...uniquePlayers, playerData];
+    
     await updateDoc(roomRef, {
-      players: arrayUnion(playerData),
+      players: updatedPlayers,
     });
 
-    // Add user to players subcollection (this can use serverTimestamp)
+    // Add user to players subcollection
     await setDoc(doc(db, `rooms/${roomId}/players`, user.uid), {
       uid: user.uid,
       displayName: user.displayName || "لاعب",
       isHost: false,
       isReady: false,
       score: 0,
+      streak: 0,
+      answers: [],
+      lastAnswer: null,
       joinedAt: serverTimestamp(),
     });
 
@@ -309,15 +336,24 @@ function setupRoomListeners(
           اللاعبون: ${roomData.players?.length || 0}/${roomData.maxPlayers}
         `;
       }
-
-      // Update player count displays
+      // Update player count displays with debouncing
       const playersCount = document.getElementById("playersCount");
       const readyCount = document.getElementById("readyCount");
 
-      if (playersCount)
-        playersCount.textContent = roomData.players?.length || 0;
+      if (playersCount) {
+        const uniquePlayers =
+          roomData.players?.filter(
+            (p, index, self) => index === self.findIndex((t) => t.uid === p.uid)
+          ) || [];
+        playersCount.textContent = uniquePlayers.length;
+      }
+
       if (readyCount) {
-        const readyPlayers = roomData.players?.filter((p) => p.isReady) || [];
+        const uniquePlayers =
+          roomData.players?.filter(
+            (p, index, self) => index === self.findIndex((t) => t.uid === p.uid)
+          ) || [];
+        const readyPlayers = uniquePlayers.filter((p) => p.isReady);
         readyCount.textContent = readyPlayers.length;
       }
 
@@ -374,39 +410,46 @@ function setupRoomListeners(
       if (playerListElement) {
         playerListElement.innerHTML = "";
 
+        // Use Set to ensure unique players
+        const uniquePlayers = new Map();
         snapshot.docs.forEach((playerDoc) => {
           const player = playerDoc.data();
+          uniquePlayers.set(player.uid, player);
+        });
+
+        // Display only unique players
+        Array.from(uniquePlayers.values()).forEach((player) => {
           const playerElement = document.createElement("div");
           playerElement.className =
             "flex items-center justify-between p-3 bg-white/5 rounded-lg mb-2";
           playerElement.innerHTML = `
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                <span class="text-white font-bold">${
-                  player.displayName?.charAt(0) || "?"
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+              <span class="text-white font-bold">${
+                player.displayName?.charAt(0) || "?"
+              }</span>
+            </div>
+            <div>
+              <p class="text-white font-medium">${player.displayName}</p>
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full ${
+                  player.isReady ? "bg-green-500" : "bg-yellow-500"
+                }"></span>
+                <span class="text-blue-200 text-xs">${
+                  player.isReady ? "مستعد" : "في انتظار"
                 }</span>
-              </div>
-              <div>
-                <p class="text-white font-medium">${player.displayName}</p>
-                <div class="flex items-center gap-2">
-                  <span class="w-2 h-2 rounded-full ${
-                    player.isReady ? "bg-green-500" : "bg-yellow-500"
-                  }"></span>
-                  <span class="text-blue-200 text-xs">${
-                    player.isReady ? "مستعد" : "في انتظار"
-                  }</span>
-                  ${
-                    player.isHost
-                      ? '<span class="text-yellow-400 text-xs">👑 المضيف</span>'
-                      : ""
-                  }
-                </div>
+                ${
+                  player.isHost
+                    ? '<span class="text-yellow-400 text-xs">👑 المضيف</span>'
+                    : ""
+                }
               </div>
             </div>
-            <div class="text-blue-200 text-sm">
-              ${player.score || 0} نقطة
-            </div>
-          `;
+          </div>
+          <div class="text-blue-200 text-sm">
+            ${player.score || 0} نقطة
+          </div>
+        `;
           playerListElement.appendChild(playerElement);
         });
       }
@@ -457,20 +500,275 @@ async function startGame(roomId) {
       roomData.questionCount
     );
 
-    // Update room status to started
+    // Initialize game state
     await updateDoc(roomRef, {
-      status: "started",
-      startedAt: serverTimestamp(),
-      currentQuestion: 0,
+      status: "starting",
+      "gameStats.totalQuestions": roomData.questionCount,
+      "gameStats.currentQuestionIndex": 0,
+      "gameStats.startTime": serverTimestamp(),
+      "gameStats.endTime": null,
+      // Reset all player scores and states for new game
+      players: roomData.players.map((player) => ({
+        ...player,
+        score: 0,
+        streak: 0,
+        answers: [],
+        lastAnswer: null,
+        isReady: true, // Keep ready state for game
+      })),
     });
 
-    showToast("تم بدء اللعبة! سيتم تحويل جميع اللاعبين إلى الغرفة", "success");
+    showToast("تبدأ اللعبة خلال 3 ثواني!", "success");
+
+    // After 3 seconds, start the first question
+    setTimeout(async () => {
+      await startQuestion(roomId, 0);
+    }, 3000);
   } catch (error) {
     console.error("Error starting game:", error);
     showToast("فشل في بدء اللعبة: " + error.message, "error");
   }
 }
+// --- Start Question ---
+async function startQuestion(roomId, questionIndex) {
+  try {
+    const roomRef = doc(db, "rooms", roomId);
+    const questionsRef = collection(db, `rooms/${roomId}/questions`);
+    const questionsSnapshot = await getDocs(questionsRef);
 
+    if (
+      questionsSnapshot.empty ||
+      questionIndex >= questionsSnapshot.docs.length
+    ) {
+      // No more questions, end game
+      await endGame(roomId);
+      return;
+    }
+
+    const questionDoc = questionsSnapshot.docs[questionIndex];
+    const questionData = questionDoc.data();
+
+    // Update room with current question
+    await updateDoc(roomRef, {
+      status: "in-progress",
+      "currentQuestion.index": questionIndex,
+      "currentQuestion.startTime": serverTimestamp(),
+      "currentQuestion.questionId": questionDoc.id,
+      "currentQuestion.answers": [],
+      "gameStats.currentQuestionIndex": questionIndex,
+    });
+
+    // Set timeout for question end (10 seconds)
+    setTimeout(async () => {
+      await endQuestion(roomId, questionIndex);
+    }, 10000); // 10 seconds per question
+  } catch (error) {
+    console.error("Error starting question:", error);
+  }
+}
+
+// --- End Question ---
+async function endQuestion(roomId, questionIndex) {
+  try {
+    const roomRef = doc(db, "rooms", roomId);
+    const roomDoc = await getDoc(roomRef);
+
+    if (!roomDoc.exists()) return;
+
+    const roomData = roomDoc.data();
+    const questionsRef = collection(db, `rooms/${roomId}/questions`);
+    const questionDoc = await getDoc(
+      doc(questionsRef, roomData.currentQuestion.questionId)
+    );
+
+    if (!questionDoc.exists()) return;
+
+    const questionData = questionDoc.data();
+    const correctAnswer = questionData.correctAnswer;
+
+    // Process all answers and calculate scores
+    const updatedPlayers = roomData.players.map((player) => {
+      const playerAnswer = roomData.currentQuestion.answers.find(
+        (answer) => answer.playerId === player.uid
+      );
+
+      if (playerAnswer) {
+        const isCorrect = playerAnswer.answer === correctAnswer;
+        const timeTaken = playerAnswer.timeTaken || 10000;
+
+        const pointsEarned = calculatePoints(
+          isCorrect,
+          timeTaken,
+          player.streak
+        );
+        const newScore = player.score + pointsEarned;
+        const newStreak = isCorrect ? player.streak + 1 : 0;
+
+        return {
+          ...player,
+          score: newScore,
+          streak: newStreak,
+          answers: [
+            ...player.answers,
+            {
+              questionIndex,
+              answer: playerAnswer.answer,
+              isCorrect,
+              timeTaken,
+              pointsEarned,
+            },
+          ],
+          lastAnswer: {
+            questionIndex,
+            answer: playerAnswer.answer,
+            isCorrect,
+            timeTaken,
+            pointsEarned,
+          },
+        };
+      }
+
+      // Player didn't answer
+      return {
+        ...player,
+        streak: 0,
+        answers: [
+          ...player.answers,
+          {
+            questionIndex,
+            answer: null,
+            isCorrect: false,
+            timeTaken: 10000, // Max time
+            pointsEarned: 0,
+          },
+        ],
+      };
+    });
+
+    // Update room with processed scores
+    await updateDoc(roomRef, {
+      players: updatedPlayers,
+      status: "show-results", // Brief results display
+    });
+
+    // Show results for 3 seconds, then next question
+    setTimeout(async () => {
+      await startQuestion(roomId, questionIndex + 1);
+    }, 3000);
+  } catch (error) {
+    console.error("Error ending question:", error);
+  }
+}
+
+// --- Calculate Points ---
+function calculatePoints(isCorrect, timeTaken, currentStreak) {
+  if (!isCorrect) return 0;
+
+  const basePoints = 100;
+  const timeBonus = Math.max(0, 10000 - timeTaken) / 100; // Up to 100 points for speed
+  const streakBonus = currentStreak * 10; // 10 points per consecutive correct answer
+
+  return Math.round(basePoints + timeBonus + streakBonus);
+}
+
+// --- Submit Answer ---
+async function submitAnswer(roomId, answer) {
+  try {
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const roomRef = doc(db, "rooms", roomId);
+    const roomDoc = await getDoc(roomRef);
+
+    if (!roomDoc.exists() || roomDoc.data().status !== "in-progress") {
+      showToast("لا يمكن الإجابة الآن", "warning");
+      return;
+    }
+
+    const roomData = roomDoc.data();
+
+    // Check if player already answered
+    const existingAnswer = roomData.currentQuestion.answers.find(
+      (ans) => ans.playerId === user.uid
+    );
+
+    if (existingAnswer) {
+      showToast("لقد أجبت على هذا السؤال بالفعل", "info");
+      return;
+    }
+
+    // Calculate time taken
+    const questionStartTime =
+      roomData.currentQuestion.startTime?.toDate?.() ||
+      new Date(roomData.currentQuestion.startTime);
+    const timeTaken = Date.now() - questionStartTime.getTime();
+
+    // Add answer to current question
+    await updateDoc(roomRef, {
+      "currentQuestion.answers": arrayUnion({
+        playerId: user.uid,
+        answer: answer,
+        timestamp: serverTimestamp(),
+        timeTaken: timeTaken,
+      }),
+    });
+
+    showToast("تم تسجيل إجابتك!", "success");
+  } catch (error) {
+    console.error("Error submitting answer:", error);
+    showToast("فشل في تسجيل الإجابة", "error");
+  }
+}
+
+// --- End Game ---
+async function endGame(roomId) {
+  try {
+    const roomRef = doc(db, "rooms", roomId);
+    const roomDoc = await getDoc(roomRef);
+
+    if (!roomDoc.exists()) return;
+
+    const roomData = roomDoc.data();
+
+    // Update room status and end time
+    await updateDoc(roomRef, {
+      status: "finished",
+      "gameStats.endTime": serverTimestamp(),
+    });
+
+    // Update user stats with game results
+    await updateUserStatsAfterGame(roomData.players);
+
+    showToast("انتهت اللعبة! عرض النتائج...", "success");
+  } catch (error) {
+    console.error("Error ending game:", error);
+  }
+}
+
+// --- Update User Stats ---
+async function updateUserStatsAfterGame(players) {
+  for (const player of players) {
+    try {
+      const userRef = doc(db, "users", player.uid);
+      const userDoc = await getDoc(userRef);
+
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const newTotalPoints =
+          (userData.stats?.totalPoints || 0) + player.score;
+        const newQuizzesTaken = (userData.stats?.quizzesTaken || 0) + 1;
+
+        await updateDoc(userRef, {
+          "stats.totalPoints": newTotalPoints,
+          "stats.quizzesTaken": newQuizzesTaken,
+          "stats.lastMultiplayerGame": serverTimestamp(),
+        });
+      }
+    } catch (error) {
+      console.error(`Error updating stats for user ${player.uid}:`, error);
+    }
+  }
+}
 // --- Generate Room Questions ---
 async function generateRoomQuestions(roomId, quizType, questionCount) {
   try {
@@ -973,3 +1271,5 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 });
+// Export the new functions
+export { submitAnswer, startGame, startQuestion };
