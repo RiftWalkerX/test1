@@ -2104,4 +2104,4 @@ document.addEventListener("DOMContentLoaded", function () {
 window.addEventListener("beforeunload", safeCleanup);
 
 // Export the functions
-export { submitAnswer, startGame, startQuestion, initializeRoomGame };
+export { submitAnswer, startGame, startQuestion };
