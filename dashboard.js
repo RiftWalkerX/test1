@@ -14,6 +14,7 @@ import {
   setDoc,
   serverTimestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import achievementService from "./achievement-service.js";
 
 // Toast notification system
 function showToast(message, type = "info") {
@@ -100,6 +101,24 @@ function updateProfileImages() {
   }
   if (displayNameEl) displayNameEl.textContent = displayName;
 }
+async function checkUserAchievements(userId) {
+  try {
+    const newlyUnlocked = await achievementService.checkAndUpdateAchievements(
+      userId
+    );
+
+    if (newlyUnlocked.length > 0) {
+      newlyUnlocked.forEach((achievement) => {
+        showToast(
+          `🎉 ${achievement.emoji} إنجاز جديد: ${achievement.name}! +${achievement.points_reward} نقطة`,
+          "success"
+        );
+      });
+    }
+  } catch (error) {
+    console.error("Error checking achievements:", error);
+  }
+}
 
 // Handle room invitations from URL parameters
 async function joinRoomFromInvitation(roomId) {
@@ -179,7 +198,7 @@ async function handleLevelClick(level) {
     const completedLevels = userDoc.exists()
       ? userDoc.data().completedLevels || []
       : [];
-    
+
     const levelData = getLevelData(level, completedLevels);
     if (!levelData) {
       showToast("لا يوجد بيانات لهذا المستوى بعد.", "warning");
@@ -200,37 +219,39 @@ async function handleLevelClick(level) {
 
     if (modalIcon && modalTitle && modalDescription && startLevelBtn) {
       // Get the actual level node from the container
-      const levelNode = document.querySelector(`.level-node[data-level="${level}"]`);
-      const levelIconContainer = levelNode?.querySelector('.w-16.h-16');
-      const textContainer = levelNode?.querySelector('.text-center');
-      
+      const levelNode = document.querySelector(
+        `.level-node[data-level="${level}"]`
+      );
+      const levelIconContainer = levelNode?.querySelector(".w-16.h-16");
+      const textContainer = levelNode?.querySelector(".text-center");
+
       // Sync the icon
       if (levelIconContainer) {
         modalIcon.innerHTML = levelIconContainer.innerHTML;
-        modalIcon.className = levelIconContainer.className + ' mx-auto';
+        modalIcon.className = levelIconContainer.className + " mx-auto";
       } else {
         modalIcon.className = `w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${levelData.bgClass}`;
         modalIcon.innerHTML = levelData.icon;
       }
-      
+
       // Sync the title from HTML (h3 element)
-      const levelTitleEl = textContainer?.querySelector('h3');
+      const levelTitleEl = textContainer?.querySelector("h3");
       if (levelTitleEl) {
         modalTitle.textContent = levelTitleEl.textContent;
       } else {
         modalTitle.textContent = levelData.title;
       }
-      
+
       // Sync the description from HTML (first p element after h3)
-      const levelDescEl = textContainer?.querySelector('h3 + p');
+      const levelDescEl = textContainer?.querySelector("h3 + p");
       if (levelDescEl && levelDescEl.textContent.trim()) {
         modalDescription.textContent = levelDescEl.textContent;
       } else {
         modalDescription.textContent = levelData.description;
       }
-      
+
       // Get the status text from HTML (last p element)
-      const statusTextEl = textContainer?.querySelector('p:last-child');
+      const statusTextEl = textContainer?.querySelector("p:last-child");
       let statusText = "بدء المستوى";
       if (statusTextEl) {
         if (statusTextEl.textContent.includes("مكتمل")) {
@@ -239,7 +260,7 @@ async function handleLevelClick(level) {
           statusText = "بدء المستوى";
         }
       }
-      
+
       startLevelBtn.textContent = statusText;
 
       // ensure we remove previous handler to avoid stacking handlers
@@ -513,7 +534,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     loadRoomInvites();
     setupRoomInviteListener();
     checkDailyStreak(user.uid);
-
+    await checkUserAchievements(user.uid);
     // Handle room invitations from URL parameters after auth is ready
     const urlParams = new URLSearchParams(window.location.search);
     const joinRoomId = urlParams.get("joinRoom");

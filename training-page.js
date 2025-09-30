@@ -608,6 +608,24 @@ class TrainingLevelInterface {
           currentLevel: this.currentLevel + 1,
           "stats.totalPoints": this.currentPoints,
         });
+        // Check for new achievements after level completion
+        setTimeout(async () => {
+          try {
+            const newlyUnlocked =
+              await achievementService.checkAndUpdateAchievements(
+                auth.currentUser.uid
+              );
+            newlyUnlocked.forEach((achievement) => {
+              // You can show a special notification here for level-related achievements
+              console.log(`Unlocked achievement: ${achievement.name}`);
+            });
+          } catch (error) {
+            console.error(
+              "Error checking achievements after level completion:",
+              error
+            );
+          }
+        }, 1000);
         showToast(`مبروك! أكملت المستوى ${this.currentLevel}.`, "success");
       } catch (err) {
         console.error("completeLevel updateDoc error:", err);

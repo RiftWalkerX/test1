@@ -33,44 +33,60 @@ function updateValue(elementId, value) {
   if (el) el.textContent = value || "—";
 }
 
-function renderAchievements(achievements) {
+async function renderAchievements(achievements) {
   const grid = document.getElementById("achievements-grid");
   if (!grid) return;
 
-  if (!achievements || !achievements.length) {
-    grid.innerHTML =
-      '<p class="text-center text-slate-400">لا توجد إنجازات حتى الآن.</p>';
-    return;
-  }
+  const user = auth.currentUser;
+  if (!user) return;
 
-  // Map to objects if they are strings (from Firestore unlocked array)
-  const mappedAchievements = achievements.map((ach) => {
-    if (typeof ach === "string") {
-      return {
-        emoji: "🏆",
-        name: ach,
-        desc: "إنجاز مكتسب",
-      };
-    } else {
-      return ach;
+  try {
+    const achievementsWithProgress =
+      await achievementService.getUserAchievementsProgress(user.uid);
+
+    if (!achievementsWithProgress.length) {
+      grid.innerHTML =
+        '<p class="text-center text-slate-400">لا توجد إنجازات حتى الآن.</p>';
+      return;
     }
-  });
 
-  grid.innerHTML = mappedAchievements
-    .map(
-      (ach) => `
-    <div class="achievement-badge bg-surface-700/50 rounded-lg p-4 text-center">
-      <div class="text-3xl mb-2">${ach.emoji || "🏅"}</div>
-      <div class="text-sm font-semibold text-white">${ach.name || "إنجاز"}</div>
-      <div class="text-xs text-slate-400 mt-1">${
-        ach.desc || "وصف الإنجاز"
-      }</div>
-    </div>
-  `
-    )
-    .join("");
+    grid.innerHTML = achievementsWithProgress
+      .map(
+        (ach) => `
+        <div class="achievement-badge bg-surface-700/50 rounded-lg p-4 text-center border-2 ${
+          ach.unlocked ? "border-accent-400" : "border-slate-600"
+        }">
+          <div class="text-3xl mb-2">${ach.emoji}</div>
+          <div class="text-sm font-semibold text-white mb-1">${ach.name}</div>
+          <div class="text-xs text-slate-400 mb-2">${ach.description}</div>
+          
+          ${
+            !ach.unlocked
+              ? `
+            <div class="w-full bg-slate-600 rounded-full h-2 mb-1">
+              <div class="bg-accent-400 h-2 rounded-full transition-all duration-500" 
+                   style="width: ${(ach.progress * 100).toFixed(0)}%"></div>
+            </div>
+            <div class="text-xs text-slate-300">
+              ${ach.currentValue}/${ach.targetValue}
+            </div>
+          `
+              : `
+            <div class="text-xs text-accent-400 font-semibold">
+              مكتمل! +${ach.points_reward} نقطة
+            </div>
+          `
+          }
+        </div>
+      `
+      )
+      .join("");
+  } catch (error) {
+    console.error("Error rendering achievements:", error);
+    grid.innerHTML =
+      '<p class="text-center text-slate-400">حدث خطأ في تحميل الإنجازات.</p>';
+  }
 }
-
 function renderFriendsPreview(friends) {
   const list = document.getElementById("friends-list");
   const countEl = document.getElementById("friends-count");
@@ -387,7 +403,7 @@ function initApp() {
       window.location.href = "./newlogin.html";
       return;
     }
-
+    await achievementService.loadAchievements();
     try {
       const userRef = doc(db, "users", user.uid);
       const userSnap = await getDoc(userRef);
@@ -396,7 +412,7 @@ function initApp() {
         console.warn("No user data found in Firestore");
         // Create a basic user profile with minimal data
         updateValue("user-name", user.displayName || "مستخدم");
-        updateValue("user-title","user id :" + user.uid);
+        updateValue("user-title", "user id :" + user.uid);
 
         updateValue("user-rank", "#—");
 
@@ -428,7 +444,8 @@ function initApp() {
         data.displayName || user.displayName || "مستخدم"
       );
       updateValue(
-        "user-title",  data.uid ||"USER ID:   "+ user.uid || " كود المستخدم"
+        "user-title",
+        data.uid || "USER ID:   " + user.uid || " كود المستخدم"
       );
 
       // FIXED: Handle rank properly - check multiple possible fields
