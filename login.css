@@ -886,6 +886,43 @@ body {
     display: none;
 }
 
+/* Enhanced error styles */
+.text-red-400 {
+    --tw-text-opacity: 1;
+    color: rgb(248 113 113 / var(--tw-text-opacity, 1));
+}
+
+.whitespace-pre-line {
+    white-space: pre-line;
+}
+
+/* Password strength indicator */
+.password-weak {
+    color: #ef4444;
+}
+
+.password-medium {
+    color: #f59e0b;
+}
+
+.password-strong {
+    color: #10b981;
+}
+
+/* Security badge enhancements */
+.security-badge {
+    background: linear-gradient(135deg, var(--color-success) 0%, var(--color-accent) 100%);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    animation: fadeInUp var(--transition-normal);
+}
+
 .h-16 {
     height: 4rem;
 }
