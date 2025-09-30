@@ -27,8 +27,9 @@ let gameState = {
   questions: [],
   quizType: "mixed",
   hasAnswered: false,
-  gameStatus: "waiting", // waiting, playing, feedback, ended
-  playerAnswers: new Map(), // Track answers for current question
+  gameStatus: "waiting", // waiting, playing, completed, ended
+  playerAnswers: new Map(),
+  playerProgress: new Map(), // Track which players completed all questions
 };
 
 // DOM elements
@@ -194,7 +195,7 @@ async function generateAndSaveQuestions() {
   }
 }
 
-// Generate questions function (same as before)
+// Generate questions function
 async function generateQuestions(quizType, count) {
   const timestamp = Date.now();
   let allQuestions = [];
@@ -397,24 +398,6 @@ function setupRoomListeners() {
       handleRoomUpdate(roomData);
     }
   });
-
-  // Listen for answers to current question
-  setupAnswersListener();
-}
-
-function setupAnswersListener() {
-  if (answersUnsubscribe) answersUnsubscribe();
-
-  const answersRef = collection(db, `rooms/${currentRoomId}/answers`);
-  const currentQuestionQuery = query(
-    answersRef,
-    where("questionIndex", "==", gameState.currentQuestion)
-  );
-
-  answersUnsubscribe = onSnapshot(currentQuestionQuery, (snapshot) => {
-    updatePlayersAnswers(snapshot);
-    checkAllPlayersAnswered();
-  });
 }
 
 function handleRoomUpdate(roomData) {
@@ -428,9 +411,15 @@ function handleRoomUpdate(roomData) {
     currentQuestionElement.textContent = gameState.currentQuestion + 1;
   }
 
+  // If we're in final lobby, update the progress
+  if (gameState.gameStatus === "completed") {
+    const completedPlayers = roomData.completedPlayers || [];
+    updatePlayersProgressList(gameState.players, completedPlayers);
+  }
+
   // Handle game status changes
-  if (roomData.status === "ended") {
-    showGameOver();
+  if (roomData.status === "ended" && gameState.gameStatus !== "ended") {
+    showFinalResults(roomData);
   }
 }
 
@@ -444,7 +433,9 @@ function updatePlayersList() {
     playerElement.className =
       "flex items-center gap-3 bg-white/5 rounded-lg p-3";
 
-    const hasAnswered = gameState.playerAnswers.has(player.uid);
+    // For continuous gameplay, show player status based on progress
+    const playerProgress = gameState.playerProgress.get(player.uid);
+    const isCompleted = playerProgress === "completed";
 
     playerElement.innerHTML = `
       <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
@@ -456,10 +447,10 @@ function updatePlayersList() {
         <p class="text-white font-medium">${player.displayName}</p>
         <div class="flex items-center gap-2">
           <span class="w-2 h-2 rounded-full ${
-            hasAnswered ? "bg-green-500" : "bg-yellow-500"
+            isCompleted ? "bg-green-500" : "bg-blue-500"
           }"></span>
           <span class="text-blue-200 text-xs">${
-            hasAnswered ? "أجاب" : "ينتظر"
+            isCompleted ? "مكتمل" : "يلعب"
           }</span>
           ${
             player.isHost
@@ -477,27 +468,6 @@ function updatePlayersList() {
   });
 }
 
-function updatePlayersAnswers(snapshot) {
-  // Reset player answers for current question
-  gameState.playerAnswers.clear();
-
-  snapshot.docs.forEach((doc) => {
-    const answerData = doc.data();
-    gameState.playerAnswers.set(answerData.playerId, answerData);
-  });
-
-  updatePlayersList();
-}
-
-function checkAllPlayersAnswered() {
-  if (gameState.playerAnswers.size >= gameState.players.length) {
-    // All players have answered, show results after a short delay
-    setTimeout(() => {
-      showQuestionResults();
-    }, 1000);
-  }
-}
-
 function startGame() {
   gameState.gameStatus = "playing";
   loadCurrentQuestion();
@@ -505,7 +475,9 @@ function startGame() {
 
 function loadCurrentQuestion() {
   if (gameState.currentQuestion >= gameState.questions.length) {
-    showGameOver();
+    // Player completed all questions
+    markPlayerAsCompleted();
+    showFinalLobby();
     return;
   }
 
@@ -515,9 +487,8 @@ function loadCurrentQuestion() {
     return;
   }
 
-  // Reset game state for new question
+  // Reset for new question
   gameState.hasAnswered = false;
-  gameState.playerAnswers.clear();
 
   // Show question content
   loadingState.classList.add("hidden");
@@ -540,14 +511,11 @@ function loadCurrentQuestion() {
     loadDialogueQuestion(question);
   }
 
-  // Update difficulty indicator
-  updateDifficultyIndicator(question.difficulty);
+  // Update progress display
+  updateProgressDisplay();
 
   // Set up answer buttons
   setupAnswerButtons(question);
-
-  // Setup answers listener for this question
-  setupAnswersListener();
 }
 
 function loadSMSQuestion(question) {
@@ -645,6 +613,35 @@ function updateDifficultyIndicator(difficulty) {
   }
 }
 
+function updateProgressDisplay() {
+  if (currentQuestionElement) {
+    currentQuestionElement.textContent = gameState.currentQuestion + 1;
+  }
+
+  // Update progress bar if exists, or create one
+  let progressBar = document.getElementById("playerProgressBar");
+  if (!progressBar) {
+    progressBar = document.createElement("div");
+    progressBar.id = "playerProgressBar";
+    progressBar.className = "w-full bg-white/10 rounded-full h-2 mt-2";
+    progressBar.innerHTML =
+      '<div class="bg-green-500 h-2 rounded-full transition-all duration-300" id="progressFill"></div>';
+    const progressContainer = document
+      .querySelector("#currentQuestion")
+      .closest("div");
+    if (progressContainer) {
+      progressContainer.appendChild(progressBar);
+    }
+  }
+
+  const progressFill = document.getElementById("progressFill");
+  if (progressFill) {
+    const progress =
+      (gameState.currentQuestion / gameState.totalQuestions) * 100;
+    progressFill.style.width = `${progress}%`;
+  }
+}
+
 function setupAnswerButtons(question) {
   // Remove existing event listeners
   const newSafeBtn = safeBtn.cloneNode(true);
@@ -710,10 +707,10 @@ async function handleDialogueAnswer(question) {
       JSON.stringify(question.correctAnswers.sort());
 
     await saveAnswer(`dialogue:${selectedMessages.join(",")}`, isCorrect);
-    showWaitingForPlayers();
+    moveToNextQuestion();
   } catch (error) {
     console.error("Error handling dialogue answer:", error);
-    showWaitingForPlayers();
+    moveToNextQuestion();
   }
 }
 
@@ -728,11 +725,20 @@ async function handleAnswer(answer, question) {
 
   try {
     await saveAnswer(answer, isCorrect);
-    showWaitingForPlayers();
+    moveToNextQuestion();
   } catch (error) {
     console.error("Error handling answer:", error);
-    showWaitingForPlayers();
+    moveToNextQuestion();
   }
+}
+
+// New function to move to next question
+function moveToNextQuestion() {
+  // Brief pause before next question
+  setTimeout(() => {
+    gameState.currentQuestion++;
+    loadCurrentQuestion();
+  }, 500);
 }
 
 async function saveAnswer(answer, isCorrect) {
@@ -768,148 +774,188 @@ async function saveAnswer(answer, isCorrect) {
   }
 }
 
-function showWaitingForPlayers() {
-  questionContent.classList.add("hidden");
-  waitingState.classList.remove("hidden");
-
-  // Update waiting text based on current progress
-  const answeredCount = gameState.playerAnswers.size;
-  const totalPlayers = gameState.players.length;
-  document.getElementById(
-    "waitingText"
-  ).textContent = `بانتظار اللاعبين... (${answeredCount}/${totalPlayers})`;
-}
-
-async function showQuestionResults() {
-  const question = gameState.questions[gameState.currentQuestion];
-  if (!question) return;
-
-  // Calculate results for this question
-  const correctAnswers = Array.from(gameState.playerAnswers.values()).filter(
-    (answer) => answer.isCorrect
-  ).length;
-
-  // Show results state
-  questionContent.classList.add("hidden");
-  waitingState.classList.add("hidden");
-  resultsState.classList.remove("hidden");
-
-  resultsState.innerHTML = `
-    <div class="text-center py-8">
-      <div class="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-green-500 to-blue-600 rounded-full flex items-center justify-center">
-        <span class="text-white text-2xl">📊</span>
-      </div>
-      <h3 class="text-xl font-bold text-white mb-2">نتيجة السؤال</h3>
-      <p class="text-blue-200 mb-4">${
-        question.explanation || "لا توجد تفاصيل إضافية"
-      }</p>
-      <div class="bg-white/5 rounded-xl p-4 mb-4">
-        <div class="grid grid-cols-2 gap-4 text-center">
-          <div>
-            <div class="text-2xl font-bold text-green-400">${correctAnswers}</div>
-            <div class="text-sm text-blue-200">أجابوا صح</div>
-          </div>
-          <div>
-            <div class="text-2xl font-bold text-blue-400">${
-              gameState.players.length - correctAnswers
-            }</div>
-            <div class="text-sm text-blue-200">أجابوا خطأ</div>
-          </div>
-        </div>
-      </div>
-      <p class="text-white/80 text-sm">الانتقال إلى السؤال التالي...</p>
-    </div>
-  `;
-
-  // Move to next question after delay
-  setTimeout(() => {
-    gameState.currentQuestion++;
-    if (gameState.currentQuestion < gameState.questions.length) {
-      loadCurrentQuestion();
-    } else {
-      showGameOver();
-    }
-  }, 3000);
-}
-
-async function showGameOver() {
+// New function to mark player as completed
+async function markPlayerAsCompleted() {
   try {
-    // Calculate final scores
     const roomRef = doc(db, "rooms", currentRoomId);
-    const roomDoc = await getDoc(roomRef);
+    await updateDoc(roomRef, {
+      completedPlayers: arrayUnion(currentUser.uid),
+    });
 
-    if (roomDoc.exists()) {
-      const roomData = roomDoc.data();
-      const finalScores = roomData.players || [];
+    gameState.gameStatus = "completed";
+    gameState.playerProgress.set(currentUser.uid, "completed");
+  } catch (error) {
+    console.error("Error marking player as completed:", error);
+  }
+}
 
-      // Sort players by score
-      finalScores.sort((a, b) => (b.score || 0) - (a.score || 0));
+// New function to show final lobby
+function showFinalLobby() {
+  questionContent.classList.add("hidden");
+  loadingState.classList.add("hidden");
 
-      // Show game over modal
-      const gameOverModal = document.getElementById("gameOverModal");
-      const finalScoresElement = document.getElementById("finalScores");
+  // Create or show final lobby
+  let finalLobby = document.getElementById("finalLobby");
+  if (!finalLobby) {
+    finalLobby = document.createElement("div");
+    finalLobby.id = "finalLobby";
+    finalLobby.className = "text-center py-12";
+    finalLobby.innerHTML = `
+      <div class="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-full flex items-center justify-center">
+        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <h3 class="text-xl font-bold text-white mb-2">لقد أكملت جميع الأسئلة!</h3>
+      <p class="text-blue-200 mb-4" id="waitingPlayersText">بانتظار باقي اللاعبين...</p>
+      <div class="bg-white/5 rounded-xl p-4 max-w-md mx-auto">
+        <h4 class="text-white font-medium mb-3">تقدم اللاعبين:</h4>
+        <div id="playersProgressList"></div>
+      </div>
+    `;
+    questionContainer.appendChild(finalLobby);
+  } else {
+    finalLobby.classList.remove("hidden");
+  }
 
-      if (finalScoresElement) {
-        finalScoresElement.innerHTML = "";
+  // Start listening for game completion
+  setupCompletionListener();
+}
 
-        finalScores.forEach((player, index) => {
-          const rank = index + 1;
-          const scoreElement = document.createElement("div");
-          scoreElement.className =
-            "flex items-center justify-between py-2 border-b border-white/10";
-          scoreElement.innerHTML = `
-            <div class="flex items-center gap-3">
-              <span class="w-6 h-6 rounded-full flex items-center justify-center ${
-                rank === 1
-                  ? "bg-yellow-500"
-                  : rank === 2
-                  ? "bg-gray-400"
-                  : rank === 3
-                  ? "bg-orange-600"
-                  : "bg-blue-500"
-              } text-white text-sm">${rank}</span>
-              <span class="text-gray-900 font-medium">${
-                player.displayName
-              }</span>
-              ${
-                player.isHost
-                  ? '<span class="text-yellow-600 text-sm">👑</span>'
-                  : ""
-              }
-            </div>
-            <span class="text-gray-900 font-bold">${
-              player.score || 0
-            } نقطة</span>
-          `;
-          finalScoresElement.appendChild(scoreElement);
-        });
+// New function to listen for all players completion
+function setupCompletionListener() {
+  const roomRef = doc(db, "rooms", currentRoomId);
+
+  // Listen for room updates to check if all players completed
+  roomUnsubscribe = onSnapshot(roomRef, (doc) => {
+    if (doc.exists()) {
+      const roomData = doc.data();
+      const completedPlayers = roomData.completedPlayers || [];
+      const totalPlayers = roomData.players?.length || 0;
+
+      // Update waiting text
+      const waitingText = document.getElementById("waitingPlayersText");
+      if (waitingText) {
+        waitingText.textContent = `بانتظار باقي اللاعبين... (${completedPlayers.length}/${totalPlayers})`;
       }
 
-      if (gameOverModal) {
-        gameOverModal.classList.remove("hidden");
+      // Update players progress
+      updatePlayersProgressList(roomData.players || [], completedPlayers);
 
-        // Update room status
-        await updateDoc(roomRef, {
-          status: "ended",
-          endedAt: serverTimestamp(),
-        });
-
-        // Setup close button
-        const closeModalBtn = document.getElementById("closeModalBtn");
-        if (closeModalBtn) {
-          closeModalBtn.onclick = function () {
-            safeCleanup();
-            window.location.href = "dashboard.html";
-          };
-        }
-
-        // Remove play again button for now
-        const playAgainBtn = document.getElementById("playAgainBtn");
-        if (playAgainBtn) playAgainBtn.remove();
+      // Check if all players completed
+      if (completedPlayers.length >= totalPlayers && totalPlayers > 0) {
+        // All players completed, show final results
+        setTimeout(() => {
+          showFinalResults(roomData);
+        }, 2000);
       }
     }
-  } catch (error) {
-    console.error("Error in showGameOver:", error);
+  });
+}
+
+// New function to update players progress in final lobby
+function updatePlayersProgressList(players, completedPlayers) {
+  const progressList = document.getElementById("playersProgressList");
+  if (!progressList) return;
+
+  progressList.innerHTML = "";
+
+  players.forEach((player) => {
+    const isCompleted = completedPlayers.includes(player.uid);
+    const playerElement = document.createElement("div");
+    playerElement.className =
+      "flex items-center justify-between py-2 border-b border-white/10 last:border-b-0";
+    playerElement.innerHTML = `
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+          <span class="text-white text-sm">${
+            player.displayName?.charAt(0) || "?"
+          }</span>
+        </div>
+        <span class="text-white text-sm">${player.displayName}</span>
+        ${
+          player.isHost ? '<span class="text-yellow-400 text-xs">👑</span>' : ""
+        }
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full ${
+          isCompleted ? "bg-green-500" : "bg-yellow-500"
+        }"></span>
+        <span class="text-blue-200 text-xs">${
+          isCompleted ? "مكتمل" : "يجيب"
+        }</span>
+      </div>
+    `;
+    progressList.appendChild(playerElement);
+  });
+}
+
+// New function to show final results to all players
+async function showFinalResults(roomData) {
+  // Calculate final scores and rankings
+  const players = roomData.players || [];
+  const sortedPlayers = [...players].sort(
+    (a, b) => (b.score || 0) - (a.score || 0)
+  );
+
+  // Show game over modal with final results
+  const gameOverModal = document.getElementById("gameOverModal");
+  const finalScoresElement = document.getElementById("finalScores");
+
+  if (finalScoresElement) {
+    finalScoresElement.innerHTML = "";
+
+    sortedPlayers.forEach((player, index) => {
+      const rank = index + 1;
+      const scoreElement = document.createElement("div");
+      scoreElement.className =
+        "flex items-center justify-between py-3 border-b border-gray-200 last:border-b-0";
+      scoreElement.innerHTML = `
+        <div class="flex items-center gap-3">
+          <span class="w-8 h-8 rounded-full flex items-center justify-center ${
+            rank === 1
+              ? "bg-yellow-500"
+              : rank === 2
+              ? "bg-gray-400"
+              : rank === 3
+              ? "bg-orange-600"
+              : "bg-blue-500"
+          } text-white text-sm font-bold">${rank}</span>
+          <span class="text-gray-900 font-medium">${player.displayName}</span>
+          ${
+            player.isHost
+              ? '<span class="text-yellow-600 text-sm">👑</span>'
+              : ""
+          }
+        </div>
+        <span class="text-gray-900 font-bold">${player.score || 0} نقطة</span>
+      `;
+      finalScoresElement.appendChild(scoreElement);
+    });
+  }
+
+  if (gameOverModal) {
+    gameOverModal.classList.remove("hidden");
+
+    // Update room status to ended
+    const roomRef = doc(db, "rooms", currentRoomId);
+    await updateDoc(roomRef, {
+      status: "ended",
+      endedAt: serverTimestamp(),
+    });
+
+    // Setup close button
+    const closeModalBtn = document.getElementById("closeModalBtn");
+    if (closeModalBtn) {
+      closeModalBtn.onclick = function () {
+        safeCleanup();
+        window.location.href = "dashboard.html";
+      };
+    }
+
+    // Remove play again button for now
+    const playAgainBtn = document.getElementById("playAgainBtn");
+    if (playAgainBtn) playAgainBtn.remove();
   }
 }
 
